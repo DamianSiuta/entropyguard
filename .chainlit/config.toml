@@ -1,0 +1,54 @@
+[project]
+name = "Estetica Dental"
+user_env = []
+session_timeout = 3600
+cache = false
+
+[features]
+unsafe_allow_html = true
+latex = false
+user_message_autoscroll = true
+auto_tag_thread = true
+edit_message = true
+allow_thread_sharing = false
+
+[features.spontaneous_file_upload]
+enabled = true
+accept = ["*/*"]
+max_files = 20
+max_size_mb = 500
+
+[features.audio]
+enabled = false
+sample_rate = 24000
+
+[features.mcp]
+enabled = false
+
+[UI]
+# --- NAZWY I OPISY ---
+name = "Estetica Dental"
+description = "System Rejestracji Premium"
+
+# --- WYGLĄD ---
+layout = "wide"
+default_theme = "light"
+custom_css = "/public/style.css"
+
+# --- BRANDING (OBRAZKI) ---
+# Logo w lewym górnym rogu
+logo_file_url = "/public/autonai-logo-vector.png"
+
+# Domyślna twarz bota (zamiast robota)
+default_avatar_file_url = "/public/avataranna.png"
+
+# --- INNE ---
+cot = "tool_call"
+alert_style = "classic"
+
+# (Te zostaw puste, bo używamy plików lokalnych powyżej)
+logo_file_url_dark = "" 
+default_avatar_file_url_dark = ""
+
+[meta]
+generated_by = "2.9.3"
