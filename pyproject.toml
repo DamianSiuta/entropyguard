@@ -1,0 +1,57 @@
+[tool.poetry]
+name = "entropyguard"
+version = "0.1.0"
+description = "AI Data Sanitation Infrastructure - MVP"
+authors = ["EntropyGuard Team"]
+readme = "README.md"
+packages = [{include = "entropyguard", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+polars = "^0.20.0"
+torch = "^2.1.0"
+faiss-cpu = "^1.7.4"
+numpy = "^1.24.0"
+pydantic = "^2.5.0"
+typing-extensions = "^4.8.0"
+sentence-transformers = "^2.0.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.0"
+pytest-cov = "^4.1.0"
+pytest-asyncio = "^0.21.0"
+black = "^23.11.0"
+ruff = "^0.1.6"
+mypy = "^1.7.0"
+mkdocs = "^1.5.0"
+mkdocs-material = "^9.4.0"
+
+[tool.poetry.scripts]
+entropyguard = "entropyguard.cli:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --cov=src/entropyguard --cov-report=term-missing"
+
+[tool.black]
+line-length = 100
+target-version = ['py310']
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+strict_optional = true
+
