@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "entropyguard"
 version = "0.1.0"
-description = "AI Data Sanitation Infrastructure - MVP"
+description = "Enterprise-grade semantic data deduplication and sanitization engine."
 authors = ["EntropyGuard Team"]
 readme = "README.md"
 packages = [{include = "entropyguard", from = "src"}]
@@ -9,6 +9,8 @@ packages = [{include = "entropyguard", from = "src"}]
 [tool.poetry.dependencies]
 python = "^3.10"
 polars = "^0.20.0"
+pyarrow = "^15.0.0"
+fastexcel = "^0.11.6"
 torch = "^2.1.0"
 faiss-cpu = "^1.7.4"
 numpy = "^1.24.0"

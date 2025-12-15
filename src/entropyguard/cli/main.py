@@ -9,6 +9,8 @@ import os
 import sys
 from pathlib import Path
 
+import polars as pl
+
 # Fix Windows console encoding for emojis
 if sys.platform == "win32":
     os.system("chcp 65001 >nul 2>&1")
@@ -61,9 +63,12 @@ Examples:
 
     parser.add_argument(
         "--text-column",
-        required=True,
+        required=False,
         type=str,
-        help="Name of the text column to process",
+        help=(
+            "Name of the text column to process. "
+            "If omitted, EntropyGuard will auto-detect a string column."
+        ),
     )
 
     parser.add_argument(
@@ -86,6 +91,17 @@ Examples:
         default=0.95,
         help="Similarity threshold for deduplication (0.0-1.0, default: 0.95). "
         "Higher values = stricter (fewer duplicates found).",
+    )
+
+    parser.add_argument(
+        "--model-name",
+        type=str,
+        default="all-MiniLM-L6-v2",
+        help=(
+            "Sentence-transformers model to use for semantic embeddings. "
+            "Default: 'all-MiniLM-L6-v2'. For multilingual use cases, you can set "
+            "e.g. 'paraphrase-multilingual-MiniLM-L12-v2'."
+        ),
     )
 
     args = parser.parse_args()
@@ -116,22 +132,65 @@ Examples:
         )
         return 1
 
+    # Auto-discover text column if not provided
+    text_column = args.text_column
+    if text_column is None:
+        from entropyguard.ingestion import load_dataset
+
+        try:
+            lf = load_dataset(args.input)
+            # Inspect a small materialized sample to infer schema / string columns
+            df_head = lf.head(100).collect()
+            string_cols = [
+                col for col in df_head.columns if df_head[col].dtype == pl.Utf8
+            ]
+
+            if not string_cols:
+                print(
+                    "Error: Unable to auto-detect a text column (no string columns found).",
+                    file=sys.stderr,
+                )
+                return 1
+
+            # Choose the column with the longest average string length (fallback: first)
+            best_col = string_cols[0]
+            best_avg_len = -1.0
+            for col in string_cols:
+                lengths = df_head[col].cast(pl.Utf8).str.len_chars()
+                # Avoid division by zero
+                if len(lengths) == 0:
+                    continue
+                avg_len = float(lengths.mean())
+                if avg_len > best_avg_len:
+                    best_avg_len = avg_len
+                    best_col = col
+
+            text_column = best_col
+            print(f"⚠️  Auto-detected text column: '{text_column}'")
+        except Exception as e:
+            print(
+                f"Error: Failed to auto-detect text column: {e}",
+                file=sys.stderr,
+            )
+            return 1
+
     # Run pipeline
     print("🚀 Starting EntropyGuard pipeline...")
     print(f"   Input:  {args.input}")
     print(f"   Output: {args.output}")
-    print(f"   Text column: {args.text_column}")
+    print(f"   Text column: {text_column}")
     print(f"   Min length: {args.min_length}")
     print(f"   Dedup threshold: {args.dedup_threshold}")
+    print(f"   Model name: {args.model_name}")
     if required_columns:
         print(f"   Required columns: {', '.join(required_columns)}")
     print()
 
-    pipeline = Pipeline()
+    pipeline = Pipeline(model_name=args.model_name)
     result = pipeline.run(
         input_path=args.input,
         output_path=args.output,
-        text_column=args.text_column,
+        text_column=text_column,
         required_columns=required_columns,
         min_length=args.min_length,
         dedup_threshold=args.dedup_threshold,

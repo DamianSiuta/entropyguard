@@ -1,38 +1,37 @@
 """
 Data loader for ingesting datasets.
 
-Supports CSV, JSON, and NDJSON formats using Polars.
+Supports multiple formats (CSV, NDJSON/JSONL, Parquet, Excel) using Polars.
+
+The loader is **lazy-first**: it returns a `pl.LazyFrame` wherever possible
+to enable scalable processing on large files. Callers can decide when to
+materialize the data with `.collect()` or use streaming sinks.
 """
 
 from pathlib import Path
-from typing import Optional
 
 import polars as pl
 
 
-def load_dataset(file_path: str) -> pl.DataFrame:
+def load_dataset(file_path: str) -> pl.LazyFrame:
     """
-    Load a dataset from file.
+    Load a dataset from file as a Polars LazyFrame.
 
     Supports:
-    - CSV files (.csv)
-    - JSON files (.json)
-    - NDJSON files (.ndjson, .jsonl)
+    - CSV files (.csv) via `scan_csv`
+    - NDJSON / JSON Lines (.ndjson, .jsonl, .json) via `scan_ndjson`
+    - Parquet files (.parquet) via `scan_parquet`
+    - Excel files (.xlsx) via `read_excel` (eager) wrapped as a LazyFrame
 
     Args:
         file_path: Path to the input file
 
     Returns:
-        Polars DataFrame with the loaded data
+        Polars LazyFrame with the loaded data
 
     Raises:
         FileNotFoundError: If file doesn't exist
         ValueError: If file format is not supported
-
-    Examples:
-        >>> df = load_dataset("data.csv")
-        >>> df = load_dataset("data.json")
-        >>> df = load_dataset("data.ndjson")
     """
     path = Path(file_path)
 
@@ -43,13 +42,23 @@ def load_dataset(file_path: str) -> pl.DataFrame:
 
     try:
         if suffix == ".csv":
-            return pl.read_csv(file_path)
-        elif suffix in (".json", ".ndjson", ".jsonl"):
-            return pl.read_ndjson(file_path)
+            # Lazy CSV scanner (streaming-friendly)
+            return pl.scan_csv(file_path)
+        elif suffix in (".ndjson", ".jsonl", ".json"):
+            # Treat JSON/JSONL as newline-delimited JSON for consistency
+            return pl.scan_ndjson(file_path)
+        elif suffix == ".parquet":
+            # Lazy Parquet scanner (big data friendly)
+            return pl.scan_parquet(file_path)
+        elif suffix == ".xlsx":
+            # Excel currently uses an eager reader; wrap as LazyFrame.
+            # Requires `fastexcel` backend to be installed.
+            df = pl.read_excel(file_path)
+            return df.lazy()
         else:
             raise ValueError(
                 f"Unsupported file format: {suffix}. "
-                "Supported formats: .csv, .json, .ndjson, .jsonl"
+                "Supported formats: .csv, .json, .ndjson, .jsonl, .parquet, .xlsx"
             )
     except Exception as e:
         raise ValueError(f"Failed to load dataset from {file_path}: {str(e)}") from e

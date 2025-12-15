@@ -6,7 +6,7 @@
 ---
 
 ## [Current Phase]
-**MVP Complete** - All core modules implemented and tested. Ready for validation and deployment.
+**MVP Validated / Ready for Deployment** - Core modules implemented, tested, and demo pipeline validated on Windows (PowerShell) with `demo_dirty.jsonl`.
 
 ---
 
@@ -106,6 +106,9 @@
 ---
 
 ## [Key Decisions Log]
+
+### 2025-12-15
+- **Decision:** MVP demo validated manually on Windows (PowerShell) using `demo_dirty.jsonl` as input and `demo_clean.jsonl` as output (CLI pipeline successful end-to-end).
 
 ### 2025-12-14
 - **Decision:** Use Poetry over uv (Poetry 2.2.1 installed, uv not available)

@@ -27,10 +27,15 @@ class Pipeline:
     6. Save result
     """
 
-    def __init__(self) -> None:
-        """Initialize the pipeline with all required components."""
+    def __init__(self, model_name: str = "all-MiniLM-L6-v2") -> None:
+        """Initialize the pipeline with all required components.
+
+        Args:
+            model_name: Name of the sentence-transformers model to use for embeddings.
+                        Default: "all-MiniLM-L6-v2".
+        """
         self.validator = DataValidator()
-        self.embedder = Embedder()
+        self.embedder = Embedder(model_name=model_name)
         self.index: Optional[VectorIndex] = None
 
     def run(
@@ -63,8 +68,11 @@ class Pipeline:
         stats: dict[str, Any] = {}
 
         try:
-            # Step 1: Load dataset
-            df = load_dataset(input_path)
+            # Step 1: Load dataset (lazy)
+            lf = load_dataset(input_path)
+            # Materialize once at the start for now; downstream steps expect DataFrame.
+            # In the future this can be refactored to keep more of the pipeline lazy.
+            df = lf.collect()
             stats["loaded_rows"] = df.height
 
             if df.height == 0:

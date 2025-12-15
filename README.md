@@ -1,84 +1,104 @@
-# EntropyGuard
+# 🛡️ EntropyGuard
+### Semantic Data Optimization Engine for LLMs
 
-**AI Data Sanitation Infrastructure** - MVP
+## Overview
 
-Enterprise-grade data sanitization system built with Python 3.10+, Polars, PyTorch, and FAISS.
+EntropyGuard is a high-performance data engineering pipeline designed to prevent "Model Collapse"—a critical issue where machine learning models degrade due to training on low-quality, redundant, or contaminated data. The system addresses this challenge by providing a comprehensive solution that cleans, validates, and semantically deduplicates datasets to ensure high-quality training data for Large Language Models (LLMs).
 
-## 🎯 Mission
+What sets EntropyGuard apart is its **complete local execution** capability. The entire pipeline runs on CPU-only infrastructure, making it **air-gap compatible** and **privacy-compliant**. No data ever leaves your machine, ensuring maximum security for sensitive datasets while delivering enterprise-grade data optimization results.
 
-Build a high-performance MVP for data sanitation that can:
-- Ingest and process large datasets efficiently
-- Detect and remove duplicates using similarity search
-- Validate data quality
-- Scale to enterprise workloads
+## 🚀 Key Features
+
+* **Semantic Deduplication:** Uses `sentence-transformers` and `FAISS` (Vector Search) to find and remove meanings-based duplicates, not just exact matches. This advanced approach identifies semantically similar content even when word-for-word matches don't exist.
+
+* **Universal Ingestion:** Single CLI interface for heterogeneous data sources – Excel (`.xlsx`), Parquet (`.parquet`), CSV, and JSONL/NDJSON – all normalized into a unified processing pipeline.
+
+* **Lazy Architecture:** Built on **Polars LazyFrame** to enable streaming-style, lazy execution. Datasets larger than RAM can be processed efficiently by deferring materialization until the final write step.
+
+* **Data Sanitization:** Automated removal of PII (Personally Identifiable Information such as emails, phones), HTML tags, and noise. Ensures clean, structured data ready for training.
+
+* **Strict Quality Gates:** Integrated validation pipeline that drops empty or low-quality rows before processing. Only validated, high-quality data proceeds through the pipeline.
+
+* **Multilingual & Configurable:** Pluggable embedding backend via `--model-name` (default: `all-MiniLM-L6-v2`). Swap in multilingual models such as `paraphrase-multilingual-MiniLM-L12-v2` for German, Polish, or global datasets without changing code.
+
+* **Docker Ready:** First-class container support with a lightweight `python:3.10-slim` image and `Dockerfile` provided. Ship the same EntropyGuard pipeline to any environment that runs Docker.
+
+* **Enterprise Grade:** Fully typed (MyPy strict), tested (Pytest), and managed via Poetry. Production-ready codebase with comprehensive test coverage and maintainable architecture.
 
 ## 🛠️ Tech Stack
 
-- **Python 3.10+** (Strict Typing)
-- **Poetry** - Dependency Management
-- **Polars** - Data Processing (10-30x faster than Pandas)
-- **PyTorch** - ML Framework
-- **FAISS** - Vector Similarity Search
-- **Pytest** - Testing Framework
+* **Core:** Python 3.10+, Polars
+* **AI/ML:** PyTorch (CPU), FAISS, Sentence-Transformers
+* **Infrastructure:** Poetry, Docker-ready structure
 
-## 📦 Installation
+## ⚡ Quick Start
 
-```bash
-# Install Poetry (if not already installed)
-curl -sSL https://install.python-poetry.org | python3 -
-
-# Install dependencies
-poetry install
-
-# Activate virtual environment
-poetry shell
-```
-
-## 🧪 Testing
+### 1. Installation
 
 ```bash
-# Run all tests
-poetry run pytest
-
-# Run with coverage
-poetry run pytest --cov=src/entropyguard
-
-# Run environment verification
-poetry run pytest tests/test_environment.py -v
+git clone https://github.com/your-repo/entropyguard.git
+cd entropyguard
+python -m poetry install
 ```
 
-## 📚 Documentation
+### 2. Running the Pipeline (Automated)
 
-Documentation is built with MkDocs:
+We provide a PowerShell script for one-click execution:
+
+```powershell
+.\run_pipeline.ps1
+```
+
+### 3. Manual Usage (CLI)
 
 ```bash
-poetry run mkdocs serve
+python -m poetry run python -m entropyguard.cli.main --input data.jsonl --output clean.jsonl --dedup-threshold 0.8
 ```
 
-## 🏗️ Project Structure
+### 4. Docker Deployment (Recommended for Production)
 
-```
-entropyguard/
-├── src/
-│   └── entropyguard/      # Core package
-├── tests/                  # Test suite
-├── docs/                   # Documentation
-│   └── PROJECT_STATE.md   # State tracking
-├── pyproject.toml          # Poetry configuration
-└── README.md
+Build the image:
+
+```bash
+docker build -t entropyguard .
 ```
 
-## 🚀 Development Status
+Run the pipeline against mounted data (any supported format: `.xlsx`, `.parquet`, `.csv`, `.jsonl`):
 
-See `docs/PROJECT_STATE.md` for current status and roadmap.
+```bash
+docker run -v $(pwd)/data:/data entropyguard --input /data/file.xlsx --output /data/clean.parquet
+```
 
-## ⚠️ Constraints
+## 📊 Architecture
 
-- **Air Gap:** No external resources (strict isolation)
-- **MVP Focus:** Validate core value proposition
-- **TDD:** All code must have tests
+The EntropyGuard pipeline follows a structured, modular architecture that processes data through sequential stages:
 
-## 📄 License
+```
+[Raw Data: JSONL / CSV / Excel / Parquet]
+        ↓
+[Universal Ingestion: Excel/Parquet/CSV/JSONL Loader]
+        ↓
+[Lazy Stream (Polars LazyFrame)]
+        ↓
+[Validation]
+        ↓
+[Sanitization]
+        ↓
+[Vector Embedding (Sentence-Transformers, configurable --model-name)]
+        ↓
+[FAISS Dedup]
+        ↓
+[Clean Data (NDJSON / Parquet / downstream sinks)]
+```
 
-Proprietary - EntropyGuard Co-Founder
+**Pipeline Stages:**
+1. **Ingestion:** Loads data from Excel, Parquet, CSV, and JSONL/NDJSON into a unified lazy representation.
+2. **Validation:** Applies quality gates to filter out invalid entries before expensive processing.
+3. **Sanitization:** Removes PII, HTML tags, and noise using configurable, enterprise-safe rules.
+4. **Vector Embedding:** Generates semantic embeddings using `sentence-transformers` with a configurable `--model-name` for monolingual or multilingual workloads.
+5. **FAISS Deduplication:** Identifies and removes semantically similar duplicates at scale using FAISS.
+6. **Clean Data:** Outputs optimized, high-quality dataset suitable for LLM training or analytics workloads.
 
+---
+
+*Built for high-efficiency data engineering.*

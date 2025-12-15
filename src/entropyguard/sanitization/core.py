@@ -54,20 +54,29 @@ def normalize_text(text: Optional[str]) -> str:
     if text is None:
         return ""
 
-    # Convert to string and strip
+    # Convert to string and strip leading/trailing whitespace
     text = str(text).strip()
 
     if not text:
         return ""
 
-    # Convert to lowercase
+    # Remove HTML tags like <div>, <p>, <br>, etc.
+    # This ensures that "<div>text</div>" and "text" are treated identically.
+    text = re.sub(r"<[^>]+>", " ", text)
+
+    # Convert to lowercase for case-insensitive comparison
     text = text.lower()
 
-    # Remove excessive whitespace (multiple spaces/tabs/newlines)
+    # Normalize whitespace (multiple spaces/tabs/newlines -> single space)
     text = re.sub(r"\s+", " ", text)
 
     # Remove excessive punctuation (keep single punctuation marks)
     text = re.sub(r"([!?.]){2,}", r"\1", text)
+
+    # Strip non-word (non-alphanumeric) characters from the start and end
+    # This removes things like "*** text ###" -> "text"
+    text = re.sub(r"^[^\w]+", "", text)
+    text = re.sub(r"[^\w]+$", "", text)
 
     return text.strip()
 
