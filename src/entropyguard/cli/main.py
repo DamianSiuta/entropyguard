@@ -104,6 +104,16 @@ Examples:
         ),
     )
 
+    parser.add_argument(
+        "--audit-log",
+        type=str,
+        default=None,
+        help=(
+            "Optional path to a JSON file where an audit log of dropped/duplicate rows "
+            "will be written. Helps with compliance and data lineage."
+        ),
+    )
+
     args = parser.parse_args()
 
     # Validate input file exists
@@ -182,6 +192,8 @@ Examples:
     print(f"   Min length: {args.min_length}")
     print(f"   Dedup threshold: {args.dedup_threshold}")
     print(f"   Model name: {args.model_name}")
+    if args.audit_log:
+        print(f"   Audit log: {args.audit_log}")
     if required_columns:
         print(f"   Required columns: {', '.join(required_columns)}")
     print()
@@ -194,6 +206,7 @@ Examples:
         required_columns=required_columns,
         min_length=args.min_length,
         dedup_threshold=args.dedup_threshold,
+        audit_log_path=args.audit_log,
     )
 
     if result["success"]:

@@ -4,6 +4,9 @@ Pipeline class for orchestrating the complete EntropyGuard workflow.
 Coordinates: Ingestion -> Validation -> Sanitization -> Deduplication -> Validation -> Output
 """
 
+from __future__ import annotations
+
+import json
 from typing import Any, Optional
 
 import polars as pl
@@ -37,6 +40,8 @@ class Pipeline:
         self.validator = DataValidator()
         self.embedder = Embedder(model_name=model_name)
         self.index: Optional[VectorIndex] = None
+        # In-memory audit trail of dropped/duplicate rows for compliance reporting
+        self.audit_events: list[dict[str, Any]] = []
 
     def run(
         self,
@@ -46,6 +51,7 @@ class Pipeline:
         required_columns: Optional[list[str]] = None,
         min_length: int = 50,
         dedup_threshold: float = 0.95,
+        audit_log_path: Optional[str] = None,
     ) -> dict[str, Any]:
         """
         Run the complete pipeline.
@@ -68,11 +74,21 @@ class Pipeline:
         stats: dict[str, Any] = {}
 
         try:
+            # Reset audit trail for this run
+            self.audit_events = []
+
             # Step 1: Load dataset (lazy)
             lf = load_dataset(input_path)
             # Materialize once at the start for now; downstream steps expect DataFrame.
             # In the future this can be refactored to keep more of the pipeline lazy.
             df = lf.collect()
+
+            # Attach a stable original index so we can trace rows through the pipeline
+            if "_original_index" not in df.columns:
+                df = df.with_columns(
+                    pl.arange(0, df.height).alias("_original_index"),
+                )
+
             stats["loaded_rows"] = df.height
 
             if df.height == 0:
@@ -147,12 +163,29 @@ class Pipeline:
             distance_threshold = (2.0 * (1.0 - dedup_threshold)) ** 0.5
             duplicate_groups = self.index.find_duplicates(threshold=distance_threshold)
 
+            # Map local row indices to original indices for auditing
+            original_index_series = df["_original_index"]
             # Create set of indices to keep (keep first occurrence in each group)
             indices_to_keep = set(range(len(texts)))
             for group in duplicate_groups:
                 # Keep first, remove rest
                 sorted_group = sorted(group)
-                indices_to_keep -= set(sorted_group[1:])
+                if not sorted_group:
+                    continue
+                root_local_idx = sorted_group[0]
+                root_original_idx = int(original_index_series[root_local_idx])
+
+                # Remaining indices in this group are considered duplicates of the root
+                for dup_local_idx in sorted_group[1:]:
+                    dup_original_idx = int(original_index_series[dup_local_idx])
+                    indices_to_keep.discard(dup_local_idx)
+                    self.audit_events.append(
+                        {
+                            "row_index": dup_original_idx,
+                            "reason": "Duplicate",
+                            "details": f"Duplicate of original row {root_original_idx}",
+                        }
+                    )
 
             # Filter DataFrame to keep only non-duplicate rows
             keep_indices = sorted(indices_to_keep)
@@ -161,6 +194,58 @@ class Pipeline:
             stats["duplicates_removed"] = len(texts) - len(keep_indices)
 
             # Step 5: Validate data quality
+            # Before validation, precompute which rows will be dropped and why
+            # so we can record them in the audit log.
+            validation_base_df = df.clone()
+            if text_column not in validation_base_df.columns:
+                return {
+                    "success": False,
+                    "output_path": output_path,
+                    "stats": stats,
+                    "error": f"Text column '{text_column}' not found before validation",
+                }
+
+            # Build Python-level view of text lengths for audit logging.
+            # This avoids coupling audit logic too tightly to internal validator
+            # implementation details and keeps behaviour easy to reason about.
+            orig_indices = validation_base_df["_original_index"].to_list()
+            texts_series = validation_base_df[text_column]
+            texts_list = texts_series.to_list()
+
+            for orig_idx, value in zip(orig_indices, texts_list):
+                if value is None:
+                    self.audit_events.append(
+                        {
+                            "row_index": int(orig_idx),
+                            "reason": "Validation: empty_or_null",
+                            "details": "len=null",
+                        }
+                    )
+                    continue
+
+                text_str = str(value)
+                stripped = text_str.strip()
+                length = len(stripped)
+
+                if length == 0:
+                    self.audit_events.append(
+                        {
+                            "row_index": int(orig_idx),
+                            "reason": "Validation: empty_or_null",
+                            "details": f"len={length}",
+                        }
+                    )
+                    continue
+
+                if min_length > 0 and length < min_length:
+                    self.audit_events.append(
+                        {
+                            "row_index": int(orig_idx),
+                            "reason": "Validation: too_short",
+                            "details": f"len={length} (min_length={min_length})",
+                        }
+                    )
+
             validate_result = self.validator.validate_data(
                 df, text_column=text_column, min_text_length=min_length
             )
@@ -188,6 +273,18 @@ class Pipeline:
 
             # Step 6: Save result
             df.write_ndjson(output_path)
+
+            # Step 7: Persist audit log (if requested)
+            if audit_log_path is not None:
+                try:
+                    with open(audit_log_path, "w", encoding="utf-8") as f:
+                        json.dump(self.audit_events, f, ensure_ascii=False, indent=2)
+                    stats["audit_log_path"] = audit_log_path
+                    stats["audit_events"] = len(self.audit_events)
+                except Exception as audit_error:
+                    # Do not fail the entire pipeline if audit logging fails;
+                    # just record the error in stats.
+                    stats["audit_log_error"] = str(audit_error)
 
             # Final statistics
             stats["original_rows"] = stats["loaded_rows"]
