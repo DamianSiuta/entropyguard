@@ -1,3 +1,8 @@
+## ⚠️ Runtime Compatibility Warning
+
+EntropyGuard currently supports **Python 3.10, 3.11 and 3.12** only.  
+Python **3.13 is _not_ supported** due to missing prebuilt wheels for key dependencies (`numpy < 2.0`, `faiss-cpu`).
+
 # 🛡️ EntropyGuard
 ### Semantic Data Optimization Engine for LLMs
 
@@ -33,13 +38,25 @@ What sets EntropyGuard apart is its **complete local execution** capability. The
 
 ## ⚡ Quick Start
 
-### 1. Installation
+### 1. Installation (Developer Workflow)
 
 ```bash
-git clone https://github.com/your-repo/entropyguard.git
+git clone https://github.com/DamianSiuta/entropyguard.git
 cd entropyguard
 python -m poetry install
 ```
+
+### 1.b Installation (End User, via pip + Git)
+
+For consumers who only want to install the CLI tool (no local development setup), you can install directly from Git using `pip`:
+
+```bash
+pip install "git+https://github.com/DamianSiuta/entropyguard.git"
+```
+
+Requirements:
+- A supported Python runtime (**3.10, 3.11 or 3.12**).
+- `git` available on your system (`pip` uses it to fetch the repository).
 
 ### 2. Running the Pipeline (Automated)
 
@@ -51,8 +68,14 @@ We provide a PowerShell script for one-click execution:
 
 ### 3. Manual Usage (CLI)
 
+Basic example (local Python + Poetry):
+
 ```bash
-python -m poetry run python -m entropyguard.cli.main --input data.jsonl --output clean.jsonl --dedup-threshold 0.8
+python -m poetry run python -m entropyguard.cli.main \
+  --input data.jsonl \
+  --output clean.jsonl \
+  --min-length 50 \
+  --dedup-threshold 0.85
 ```
 
 ### 4. Docker Deployment (Recommended for Production)
@@ -98,6 +121,78 @@ The EntropyGuard pipeline follows a structured, modular architecture that proces
 4. **Vector Embedding:** Generates semantic embeddings using `sentence-transformers` with a configurable `--model-name` for monolingual or multilingual workloads.
 5. **FAISS Deduplication:** Identifies and removes semantically similar duplicates at scale using FAISS.
 6. **Clean Data:** Outputs optimized, high-quality dataset suitable for LLM training or analytics workloads.
+
+## 📜 Audit Log & Compliance
+
+EntropyGuard can optionally produce a **machine-readable audit log** for every row that was dropped or de-duplicated.
+
+- Use the `--audit-log` flag to write a JSON report:
+
+```bash
+python -m entropyguard.cli.main \
+  --input data.jsonl \
+  --output clean.jsonl \
+  --min-length 50 \
+  --dedup-threshold 0.85 \
+  --audit-log audit.json
+```
+
+Each entry in `audit.json` describes a single removed row:
+
+```json
+{
+  "row_index": 500,
+  "reason": "Duplicate",
+  "details": "Duplicate of original row 10"
+}
+```
+
+or, for validation-based drops:
+
+```json
+{
+  "row_index": 123,
+  "reason": "Validation: too_short",
+  "details": "len=5 (min_length=10)"
+}
+```
+
+This allows compliance teams and auditors to answer:  
+**“Which rows were removed, and why?”** — without inspecting raw data manually.
+
+## 🧾 CLI Reference
+
+All options for `python -m entropyguard.cli.main` (or the `entropyguard` entrypoint):
+
+| Flag                | Required | Default               | Description                                                                                   |
+|---------------------|----------|-----------------------|-----------------------------------------------------------------------------------------------|
+| `--input`           | Yes      | –                     | Path to input data file (`.xlsx`, `.parquet`, `.csv`, `.jsonl`/`.ndjson`, `.json`).          |
+| `--output`          | Yes      | –                     | Path to output data file (NDJSON/JSONL).                                                      |
+| `--text-column`     | No       | Auto-detected         | Name of the text column to process. **Optional** – auto-detected if not provided.            |
+| `--audit-log`       | No       | `None`                | Path to JSON file with audit entries for dropped/duplicate rows (compliance & traceability). |
+| `--dedup-threshold` | No       | `0.85` (recommended)  | Similarity threshold for deduplication (0.0–1.0). Higher = stricter (fewer duplicates found). |
+| `--min-length`      | No       | `50`                  | Minimum text length (characters) after sanitization. Shorter rows are dropped.               |
+| `--model-name`      | No       | `all-MiniLM-L6-v2`    | HuggingFace / sentence-transformers model for embeddings (supports multilingual models).      |
+
+## 🌟 Feature Highlights
+
+- **Semantic Deduplication:**  
+  Removes duplicates based on **meaning**, not exact string match, using sentence-transformers + FAISS.
+
+- **PII Removal & Text Sanitization:**  
+  Regex-based PII stripping (emails, phones, IDs), HTML tag removal, aggressive normalization and noise reduction.
+
+- **Local Execution (CPU / Air-Gap Friendly):**  
+  Designed to run **fully on-premise**, CPU-only. No data leaves your environment by default.
+
+- **Universal Ingestion & Lazy Processing:**  
+  Single CLI handling Excel, Parquet, CSV, JSONL; built on Polars LazyFrame to support datasets larger than RAM.
+
+- **Docker Support:**  
+  Production-ready `Dockerfile` based on `python:3.10-slim` for reproducible, portable deployments.
+
+- **Enterprise-Grade Engineering:**  
+  Strict typing (MyPy), tests (Pytest), Poetry-managed dependencies, and audit logging for compliance scenarios.
 
 ---
 
