@@ -14,6 +14,7 @@ import polars as pl
 from entropyguard.ingestion import load_dataset
 from entropyguard.validation import DataValidator
 from entropyguard.sanitization import sanitize_dataframe, SanitizationConfig
+from entropyguard.chunking import Chunker
 from entropyguard.deduplication import Embedder, VectorIndex
 
 
@@ -38,6 +39,7 @@ class Pipeline:
                         Default: "all-MiniLM-L6-v2".
         """
         self.validator = DataValidator()
+        self.chunker: Optional[Chunker] = None
         self.embedder = Embedder(model_name=model_name)
         self.index: Optional[VectorIndex] = None
         # In-memory audit trail of dropped/duplicate rows for compliance reporting
@@ -52,6 +54,8 @@ class Pipeline:
         min_length: int = 50,
         dedup_threshold: float = 0.95,
         audit_log_path: Optional[str] = None,
+        chunk_size: Optional[int] = None,
+        chunk_overlap: int = 50,
     ) -> dict[str, Any]:
         """
         Run the complete pipeline.
@@ -137,7 +141,16 @@ class Pipeline:
 
             stats["after_sanitization_rows"] = df.height
 
-            # Step 4: Deduplication
+            # Step 4: Chunking (if enabled)
+            if chunk_size is not None and chunk_size > 0:
+                if self.chunker is None:
+                    self.chunker = Chunker(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+                df = self.chunker.chunk_dataframe(df, text_col=text_column)
+                stats["after_chunking_rows"] = df.height
+            else:
+                stats["after_chunking_rows"] = df.height
+
+            # Step 5: Deduplication
             if text_column not in df.columns:
                 return {
                     "success": False,
@@ -193,7 +206,7 @@ class Pipeline:
             stats["after_deduplication_rows"] = df.height
             stats["duplicates_removed"] = len(texts) - len(keep_indices)
 
-            # Step 5: Validate data quality
+            # Step 6: Validate data quality
             # Before validation, precompute which rows will be dropped and why
             # so we can record them in the audit log.
             validation_base_df = df.clone()
@@ -271,10 +284,10 @@ class Pipeline:
             if validate_result.report:
                 stats["validation_report"] = validate_result.report
 
-            # Step 6: Save result
+            # Step 7: Save result
             df.write_ndjson(output_path)
 
-            # Step 7: Persist audit log (if requested)
+            # Step 8: Persist audit log (if requested)
             if audit_log_path is not None:
                 try:
                     with open(audit_log_path, "w", encoding="utf-8") as f:

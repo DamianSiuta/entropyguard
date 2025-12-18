@@ -24,6 +24,8 @@ What sets EntropyGuard apart is its **complete local execution** capability. The
 
 * **Strict Quality Gates:** Integrated validation pipeline that drops empty or low-quality rows before processing. Only validated, high-quality data proceeds through the pipeline.
 
+* **Text Chunking (RAG-Ready):** Optional recursive text splitting for long documents. Splits on paragraph boundaries (`\n\n`), lines (`\n`), and words (` `) with configurable overlap. Essential for Retrieval-Augmented Generation (RAG) workflows where documents must fit embedding model context windows.
+
 * **Multilingual & Configurable:** Pluggable embedding backend via `--model-name` (default: `all-MiniLM-L6-v2`). Swap in multilingual models such as `paraphrase-multilingual-MiniLM-L12-v2` for German, Polish, or global datasets without changing code.
 
 * **Docker Ready:** First-class container support with a lightweight `python:3.10-slim` image and `Dockerfile` provided. Ship the same EntropyGuard pipeline to any environment that runs Docker.
@@ -107,6 +109,8 @@ The EntropyGuard pipeline follows a structured, modular architecture that proces
         ↓
 [Sanitization]
         ↓
+[Text Chunking (Optional, if --chunk-size provided)]
+        ↓
 [Vector Embedding (Sentence-Transformers, configurable --model-name)]
         ↓
 [FAISS Dedup]
@@ -118,9 +122,10 @@ The EntropyGuard pipeline follows a structured, modular architecture that proces
 1. **Ingestion:** Loads data from Excel, Parquet, CSV, and JSONL/NDJSON into a unified lazy representation.
 2. **Validation:** Applies quality gates to filter out invalid entries before expensive processing.
 3. **Sanitization:** Removes PII, HTML tags, and noise using configurable, enterprise-safe rules.
-4. **Vector Embedding:** Generates semantic embeddings using `sentence-transformers` with a configurable `--model-name` for monolingual or multilingual workloads.
-5. **FAISS Deduplication:** Identifies and removes semantically similar duplicates at scale using FAISS.
-6. **Clean Data:** Outputs optimized, high-quality dataset suitable for LLM training or analytics workloads.
+4. **Chunking (Optional):** Splits long texts into smaller, overlapping fragments using a recursive delimiter-aware strategy. Enabled when `--chunk-size` is provided. Critical for RAG workflows.
+5. **Vector Embedding:** Generates semantic embeddings using `sentence-transformers` with a configurable `--model-name` for monolingual or multilingual workloads.
+6. **FAISS Deduplication:** Identifies and removes semantically similar duplicates at scale using FAISS.
+7. **Clean Data:** Outputs optimized, high-quality dataset suitable for LLM training or analytics workloads.
 
 ## 📜 Audit Log & Compliance
 
@@ -172,6 +177,8 @@ All options for `python -m entropyguard.cli.main` (or the `entropyguard` entrypo
 | `--audit-log`       | No       | `None`                | Path to JSON file with audit entries for dropped/duplicate rows (compliance & traceability). |
 | `--dedup-threshold` | No       | `0.85` (recommended)  | Similarity threshold for deduplication (0.0–1.0). Higher = stricter (fewer duplicates found). |
 | `--min-length`      | No       | `50`                  | Minimum text length (characters) after sanitization. Shorter rows are dropped.               |
+| `--chunk-size`      | No       | `None` (disabled)     | Optional chunk size (characters) for splitting long texts before embedding. Recommended: 512 for RAG. |
+| `--chunk-overlap`   | No       | `50`                  | Overlap size (characters) between consecutive chunks. Only used if `--chunk-size` is set.     |
 | `--model-name`      | No       | `all-MiniLM-L6-v2`    | HuggingFace / sentence-transformers model for embeddings (supports multilingual models).      |
 
 ## 🌟 Feature Highlights
@@ -184,6 +191,9 @@ All options for `python -m entropyguard.cli.main` (or the `entropyguard` entrypo
 
 - **Local Execution (CPU / Air-Gap Friendly):**  
   Designed to run **fully on-premise**, CPU-only. No data leaves your environment by default.
+
+- **Text Chunking for RAG:**  
+  Optional recursive text splitter (no LangChain dependency) that respects paragraph/line/word boundaries. Essential for preparing long documents for embedding models with fixed context windows.
 
 - **Universal Ingestion & Lazy Processing:**  
   Single CLI handling Excel, Parquet, CSV, JSONL; built on Polars LazyFrame to support datasets larger than RAM.

@@ -114,6 +114,26 @@ Examples:
         ),
     )
 
+    parser.add_argument(
+        "--chunk-size",
+        type=int,
+        default=None,
+        help=(
+            "Optional chunk size (characters) for splitting long texts before embedding. "
+            "If not provided, chunking is disabled. Recommended: 512 for RAG workflows."
+        ),
+    )
+
+    parser.add_argument(
+        "--chunk-overlap",
+        type=int,
+        default=50,
+        help=(
+            "Overlap size (characters) between consecutive chunks. "
+            "Only used if --chunk-size is set. Default: 50."
+        ),
+    )
+
     args = parser.parse_args()
 
     # Validate input file exists
@@ -141,6 +161,27 @@ Examples:
             file=sys.stderr,
         )
         return 1
+
+    # Validate chunking parameters
+    if args.chunk_size is not None:
+        if args.chunk_size <= 0:
+            print(
+                f"Error: chunk-size must be > 0, got {args.chunk_size}",
+                file=sys.stderr,
+            )
+            return 1
+        if args.chunk_overlap < 0:
+            print(
+                f"Error: chunk-overlap must be >= 0, got {args.chunk_overlap}",
+                file=sys.stderr,
+            )
+            return 1
+        if args.chunk_overlap >= args.chunk_size:
+            print(
+                f"Error: chunk-overlap ({args.chunk_overlap}) must be < chunk-size ({args.chunk_size})",
+                file=sys.stderr,
+            )
+            return 1
 
     # Auto-discover text column if not provided
     text_column = args.text_column
@@ -192,6 +233,8 @@ Examples:
     print(f"   Min length: {args.min_length}")
     print(f"   Dedup threshold: {args.dedup_threshold}")
     print(f"   Model name: {args.model_name}")
+    if args.chunk_size:
+        print(f"   Chunk size: {args.chunk_size} (overlap: {args.chunk_overlap})")
     if args.audit_log:
         print(f"   Audit log: {args.audit_log}")
     if required_columns:
@@ -207,6 +250,8 @@ Examples:
         min_length=args.min_length,
         dedup_threshold=args.dedup_threshold,
         audit_log_path=args.audit_log,
+        chunk_size=args.chunk_size,
+        chunk_overlap=args.chunk_overlap,
     )
 
     if result["success"]:
@@ -216,6 +261,8 @@ Examples:
         print("📊 Summary Statistics:")
         print(f"   Original rows:     {stats.get('original_rows', 'N/A')}")
         print(f"   After sanitization: {stats.get('after_sanitization_rows', 'N/A')}")
+        if args.chunk_size:
+            print(f"   After chunking:     {stats.get('after_chunking_rows', 'N/A')}")
         print(f"   After deduplication: {stats.get('after_deduplication_rows', 'N/A')}")
         print(f"   Duplicates removed:  {stats.get('duplicates_removed', 'N/A')}")
         print(f"   Final rows:       {stats.get('final_rows', 'N/A')}")

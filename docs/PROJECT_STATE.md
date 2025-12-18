@@ -6,7 +6,7 @@
 ---
 
 ## [Current Phase]
-**MVP Validated / Ready for Deployment** - Core modules implemented, tested, and demo pipeline validated on Windows (PowerShell) with `demo_dirty.jsonl`.
+**Feature Expansion (v1.4.0) - Text Chunking** - Adding configurable text chunking before embeddings to improve RAG performance and memory efficiency.
 
 ---
 
@@ -19,6 +19,7 @@
 - **Data Processing:** Polars (v0.20.0+)
 - **ML Framework:** PyTorch (v2.1.0+)
 - **Vector Search:** FAISS (CPU version initially)
+- **Chunking:** Custom Recursive Splitter (no external NLP dependencies)
 - **Documentation:** MkDocs + Material Theme
 
 ### Development Tools
