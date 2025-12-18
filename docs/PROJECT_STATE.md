@@ -139,7 +139,7 @@
 
 ## [Constraints & Notes]
 
-- **Air Gap:** No Siemens resources (strict isolation)
+- **Air Gap:** No external corporate resources (strict isolation)
 - **MVP Goal:** Validate core value proposition before scaling
 - **Exit Strategy:** Funding/Exit after validation
 - **Student Intern Context:** Building during off-hours

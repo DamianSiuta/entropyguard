@@ -56,6 +56,13 @@ site/
 data/
 datasets/
 
+# Data Artifacts
+*.jsonl
+audit.json
+stress_*.jsonl
+demo_*.jsonl
+*.xlsx
+
 # Logs
 *.log
 logs/
