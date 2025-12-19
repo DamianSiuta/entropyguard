@@ -6,7 +6,7 @@
 ---
 
 ## [Current Phase]
-**Feature Expansion (v1.4.0) - Text Chunking** - Adding configurable text chunking before embeddings to improve RAG performance and memory efficiency.
+**Feature Expansion (v1.5.0) - Advanced Text Chunking** - Implementing flexible recursive chunker with custom separators and CJK support (hard character-level splitting).
 
 ---
 
@@ -19,7 +19,7 @@
 - **Data Processing:** Polars (v0.20.0+)
 - **ML Framework:** PyTorch (v2.1.0+)
 - **Vector Search:** FAISS (CPU version initially)
-- **Chunking:** Custom Recursive Splitter (no external NLP dependencies)
+- **Chunking:** Custom Recursive Splitter (no external NLP dependencies, CJK support via hard character-level splitting)
 - **Documentation:** MkDocs + Material Theme
 
 ### Development Tools

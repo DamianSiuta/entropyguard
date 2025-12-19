@@ -24,7 +24,7 @@ What sets EntropyGuard apart is its **complete local execution** capability. The
 
 * **Strict Quality Gates:** Integrated validation pipeline that drops empty or low-quality rows before processing. Only validated, high-quality data proceeds through the pipeline.
 
-* **Text Chunking (RAG-Ready):** Optional recursive text splitting for long documents. Splits on paragraph boundaries (`\n\n`), lines (`\n`), and words (` `) with configurable overlap. Essential for Retrieval-Augmented Generation (RAG) workflows where documents must fit embedding model context windows.
+* **Text Chunking (RAG-Ready):** Advanced recursive text splitting with custom separators and hard fallback for CJK languages. Splits on paragraph boundaries (`\n\n`), lines (`\n`), words (` `), or characters (for languages without whitespace). Configurable overlap and separator hierarchy. **Note:** CJK languages (Chinese/Japanese/Korean) are supported via hard character-level splitting, as they lack whitespace delimiters.
 
 * **Multilingual & Configurable:** Pluggable embedding backend via `--model-name` (default: `all-MiniLM-L6-v2`). Swap in multilingual models such as `paraphrase-multilingual-MiniLM-L12-v2` for German, Polish, or global datasets without changing code.
 
@@ -78,6 +78,17 @@ python -m poetry run python -m entropyguard.cli.main \
   --output clean.jsonl \
   --min-length 50 \
   --dedup-threshold 0.85
+```
+
+With custom chunking separators:
+
+```bash
+python -m entropyguard.cli.main \
+  --input data.jsonl \
+  --output clean.jsonl \
+  --chunk-size 512 \
+  --chunk-overlap 50 \
+  --separators "|" "\\n"
 ```
 
 ### 4. Docker Deployment (Recommended for Production)
@@ -179,6 +190,7 @@ All options for `python -m entropyguard.cli.main` (or the `entropyguard` entrypo
 | `--min-length`      | No       | `50`                  | Minimum text length (characters) after sanitization. Shorter rows are dropped.               |
 | `--chunk-size`      | No       | `None` (disabled)     | Optional chunk size (characters) for splitting long texts before embedding. Recommended: 512 for RAG. |
 | `--chunk-overlap`   | No       | `50`                  | Overlap size (characters) between consecutive chunks. Only used if `--chunk-size` is set.     |
+| `--separators`      | No       | Default hierarchy     | Custom separators for chunking (space-separated). Use `\\n` for newline, `\\t` for tab. Example: `--separators "|" "\\n"`. Default: paragraph breaks, newlines, spaces, characters. |
 | `--model-name`      | No       | `all-MiniLM-L6-v2`    | HuggingFace / sentence-transformers model for embeddings (supports multilingual models).      |
 
 ## 🌟 Feature Highlights

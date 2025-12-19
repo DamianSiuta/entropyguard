@@ -56,6 +56,7 @@ class Pipeline:
         audit_log_path: Optional[str] = None,
         chunk_size: Optional[int] = None,
         chunk_overlap: int = 50,
+        chunk_separators: Optional[list[str]] = None,
     ) -> dict[str, Any]:
         """
         Run the complete pipeline.
@@ -144,7 +145,17 @@ class Pipeline:
             # Step 4: Chunking (if enabled)
             if chunk_size is not None and chunk_size > 0:
                 if self.chunker is None:
-                    self.chunker = Chunker(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+                    # Use custom separators if provided, otherwise use defaults
+                    separators = (
+                        chunk_separators
+                        if chunk_separators is not None
+                        else ["\n\n", "\n", " ", ""]
+                    )
+                    self.chunker = Chunker(
+                        chunk_size=chunk_size,
+                        chunk_overlap=chunk_overlap,
+                        separators=separators,
+                    )
                 df = self.chunker.chunk_dataframe(df, text_col=text_column)
                 stats["after_chunking_rows"] = df.height
             else:

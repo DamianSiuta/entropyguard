@@ -134,6 +134,19 @@ Examples:
         ),
     )
 
+    parser.add_argument(
+        "--separators",
+        type=str,
+        nargs="+",
+        default=None,
+        help=(
+            "Custom separators for text chunking (space-separated list). "
+            "Use escape sequences like '\\n' for newline, '\\t' for tab. "
+            "Example: --separators '|' '\\n'. "
+            "If not provided, uses default: paragraph breaks, newlines, spaces, characters."
+        ),
+    )
+
     args = parser.parse_args()
 
     # Validate input file exists
@@ -163,6 +176,7 @@ Examples:
         return 1
 
     # Validate chunking parameters
+    chunk_separators = None
     if args.chunk_size is not None:
         if args.chunk_size <= 0:
             print(
@@ -182,6 +196,14 @@ Examples:
                 file=sys.stderr,
             )
             return 1
+
+        # Decode custom separators if provided
+        if args.separators:
+            from entropyguard.chunking.splitter import Chunker
+
+            chunk_separators = [
+                Chunker.decode_separator(sep) for sep in args.separators
+            ]
 
     # Auto-discover text column if not provided
     text_column = args.text_column
@@ -234,7 +256,14 @@ Examples:
     print(f"   Dedup threshold: {args.dedup_threshold}")
     print(f"   Model name: {args.model_name}")
     if args.chunk_size:
-        print(f"   Chunk size: {args.chunk_size} (overlap: {args.chunk_overlap})")
+        sep_info = (
+            f" (separators: {', '.join(repr(s) for s in chunk_separators)})"
+            if chunk_separators
+            else ""
+        )
+        print(
+            f"   Chunk size: {args.chunk_size} (overlap: {args.chunk_overlap}){sep_info}"
+        )
     if args.audit_log:
         print(f"   Audit log: {args.audit_log}")
     if required_columns:
@@ -252,6 +281,7 @@ Examples:
         audit_log_path=args.audit_log,
         chunk_size=args.chunk_size,
         chunk_overlap=args.chunk_overlap,
+        chunk_separators=chunk_separators,
     )
 
     if result["success"]:

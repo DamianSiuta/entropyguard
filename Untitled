@@ -1,0 +1,4 @@
+git add .
+git commit -m "Release v1.5.0: The Flexibility Update - Custom Separators & CJK Hard Fallback"
+git tag v1.5.0
+git push origin main --tags
