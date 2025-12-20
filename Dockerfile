@@ -16,6 +16,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN useradd -m -u 1000 entropyguard && \
     chown -R entropyguard:entropyguard /app
 
+# Create cache directory for HuggingFace models (fixes PermissionError in GitHub Actions)
+ENV HF_HOME=/app/.cache/huggingface
+RUN mkdir -p $HF_HOME && chown -R entropyguard:entropyguard /app
+
 # Copy project metadata and source
 COPY --chown=entropyguard:entropyguard pyproject.toml README.md ./
 COPY --chown=entropyguard:entropyguard src ./src
