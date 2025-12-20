@@ -63,6 +63,10 @@ stress_*.jsonl
 demo_*.jsonl
 *.xlsx
 
+# Real World Test Data
+banking_*.jsonl
+banking_*.json
+
 # Logs
 *.log
 logs/
