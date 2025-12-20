@@ -65,12 +65,10 @@ def _send_audit_to_server(server_url: str, audit_events: list[dict[str, Any]]) -
         # Send request
         with request.urlopen(req, timeout=10) as response:
             if response.status == 200:
-                print("📡 Audit log uploaded to Control Plane successfully")
+                # Success message is handled by caller
+                pass
             else:
-                print(
-                    f"⚠️  Warning: Server returned status {response.status}",
-                    file=sys.stderr,
-                )
+                raise Exception(f"Server returned status {response.status}")
     except HTTPError as e:
         raise Exception(f"HTTP error {e.code}: {e.reason}")
     except URLError as e:
@@ -401,6 +399,24 @@ Examples:
         print(f"   Total dropped:    {stats.get('total_dropped', 'N/A')}")
         print()
         print(f"💾 Output saved to: {result['output_path']}")
+        
+        # Send audit events to Control Plane if server URL is provided
+        if args.server_url:
+            print()
+            print(f"📡 Sending audit report to {args.server_url}...")
+            try:
+                _send_audit_to_server(
+                    server_url=args.server_url,
+                    audit_events=pipeline.audit_events,
+                )
+                print("✅ Report sent successfully!")
+            except Exception as e:
+                print(
+                    f"⚠️  Warning: Failed to send report: {e}",
+                    file=sys.stderr,
+                )
+                # Continue execution - don't fail the pipeline
+        
         return 0
     else:
         print("❌ Pipeline failed!", file=sys.stderr)
