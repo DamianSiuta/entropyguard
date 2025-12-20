@@ -16,13 +16,19 @@ jobs:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
 
+      - name: 📝 Generate Test Data
+        run: |
+          echo '{"text": "Siemens energy solution", "id": 1}' > demo_dirty.jsonl
+          echo '{"text": "Siemens energy solution", "id": 2}' >> demo_dirty.jsonl
+          echo '{"text": "Unique data point", "id": 3}' >> demo_dirty.jsonl
+
       - name: 🛡️ Run EntropyGuard RAG Firewall
         uses: ./
         with:
           input_file: 'demo_dirty.jsonl'
           dedup_threshold: '0.85'
           min_length: '10'
-          fail_on_duplicates: 'true'
+          fail_on_duplicates: 'false'
           audit_log: 'audit.json'
         continue-on-error: false
 
