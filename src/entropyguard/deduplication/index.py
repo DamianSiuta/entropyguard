@@ -43,8 +43,13 @@ class VectorIndex:
         self.dimension = dimension
         self._index: faiss.IndexFlatL2 = faiss.IndexFlatL2(dimension)
         self._vector_count = 0
-        # Store vectors for duplicate detection
+        # Store vectors for duplicate detection (only needed for find_duplicates method)
+        # For batch processing, we use search() directly, so this can be disabled
+        # to save memory. However, find_duplicates() requires it for now.
         self._vectors: list[np.ndarray] = []
+        # Memory optimization: if False, don't store vectors (saves 50% RAM)
+        # Set to False when using batch processing with direct search()
+        self._store_vectors = True
 
     def size(self) -> int:
         """
@@ -111,9 +116,11 @@ class VectorIndex:
         self._index.add(valid_vectors)
         self._vector_count += valid_vectors.shape[0]
 
-        # Store vectors for duplicate detection
-        for i in range(valid_vectors.shape[0]):
-            self._vectors.append(valid_vectors[i].copy())
+        # Store vectors for duplicate detection (only if enabled)
+        # Memory optimization: skip storage when using batch processing with direct search()
+        if self._store_vectors:
+            for i in range(valid_vectors.shape[0]):
+                self._vectors.append(valid_vectors[i].copy())
 
     def search(
         self, query_vector: np.ndarray, k: int = 10
@@ -161,6 +168,16 @@ class VectorIndex:
 
         return distances_list, indices_list
 
+    def set_store_vectors(self, store: bool) -> None:
+        """
+        Enable or disable vector storage for memory optimization.
+
+        Args:
+            store: If True, store vectors (needed for find_duplicates).
+                  If False, don't store (saves ~50% RAM, but find_duplicates won't work).
+        """
+        self._store_vectors = store
+
     def find_duplicates(self, threshold: float = 0.3) -> list[set[int]]:
         """
         Find duplicate vectors based on distance threshold.
@@ -189,49 +206,14 @@ class VectorIndex:
         if self._vector_count == 0:
             return []
 
-        # Get all vectors from index (FAISS doesn't provide direct access, so we search)
-        # We'll use a more efficient approach: for each vector, find its neighbors
-        duplicate_groups: list[set[int]] = []
-        processed: set[int] = set()
+        # find_duplicates requires stored vectors to query them
+        if not self._store_vectors or len(self._vectors) == 0:
+            raise ValueError(
+                "find_duplicates() requires vector storage. "
+                "Call set_store_vectors(True) before adding vectors, "
+                "or use search() directly for batch processing."
+            )
 
-        # For each vector, find its neighbors within threshold
-        for i in range(self._vector_count):
-            if i in processed:
-                continue
-
-            # Get the vector by searching for itself (with a small epsilon)
-            # Actually, we need to reconstruct or use a different approach
-            # For now, we'll search with a large k and filter by threshold
-            try:
-                # Create a dummy query - we'll need to store vectors separately for this
-                # For MVP, we'll use a simpler approach: search all against all
-                # This is O(n^2) but acceptable for MVP
-                pass
-            except Exception:
-                pass
-
-        # Simpler approach: use the index's search capability
-        # We need to store vectors to query them. For MVP, let's use a workaround:
-        # We'll search each vector against all others by using the index's search
-
-        # Actually, FAISS IndexFlatL2 doesn't let us retrieve vectors easily.
-        # For MVP, we'll implement a simpler version that requires storing vectors.
-        # But that's not ideal. Let me implement a basic version that works:
-
-        # For now, return empty list - this will be improved in next iteration
-        # The proper implementation would require storing vectors separately
-        # or using a different FAISS index type that supports vector retrieval
-
-        # Basic implementation: search each vector against all others
-        # This requires us to have access to the vectors, which we don't store
-        # For MVP, we'll implement a version that the user must provide vectors for
-
-        # Actually, let's implement a working version using a stored vectors approach
-        # But that requires changing the API. For now, let's document the limitation
-        # and provide a basic implementation that works with the current API
-
-        # Since we can't retrieve vectors from FAISS IndexFlatL2 easily,
-        # we'll need to modify the class to store vectors. Let's do that:
         return self._find_duplicates_with_stored_vectors(threshold)
 
     def _find_duplicates_with_stored_vectors(

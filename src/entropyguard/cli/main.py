@@ -105,6 +105,17 @@ Examples:
     )
 
     parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=10000,
+        help=(
+            "Number of rows to process in each batch (default: 10000). "
+            "Larger batches use more RAM but process faster. "
+            "Smaller batches (e.g., 1000) use less RAM for large datasets."
+        ),
+    )
+
+    parser.add_argument(
         "--audit-log",
         type=str,
         default=None,
@@ -255,6 +266,7 @@ Examples:
     print(f"   Min length: {args.min_length}")
     print(f"   Dedup threshold: {args.dedup_threshold}")
     print(f"   Model name: {args.model_name}")
+    print(f"   Batch size: {args.batch_size}")
     if args.chunk_size:
         sep_info = (
             f" (separators: {', '.join(repr(s) for s in chunk_separators)})"
@@ -270,7 +282,7 @@ Examples:
         print(f"   Required columns: {', '.join(required_columns)}")
     print()
 
-    pipeline = Pipeline(model_name=args.model_name)
+    pipeline = Pipeline(model_name=args.model_name, batch_size=args.batch_size)
     result = pipeline.run(
         input_path=args.input,
         output_path=args.output,
