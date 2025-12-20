@@ -404,9 +404,6 @@ EntropyGuard is available in two editions to meet different organizational needs
 - Multi-pipeline environments needing unified control
 - Teams requiring enterprise support and SLAs
 
-> **Need centralized governance for multiple pipelines?**  
-> [Contact us for Enterprise Early Access](mailto:enterprise@entropyguard.ai) or check the [Roadmap](ROADMAP_TO_UNICORN.md).
-
 ---
 
 *Built for high-efficiency data engineering. Enterprise-ready. Production-proven.* 🚀
