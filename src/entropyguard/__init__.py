@@ -4,7 +4,7 @@ EntropyGuard - AI Data Sanitation Infrastructure
 A high-performance data sanitization system for enterprise environments.
 """
 
-__version__ = "1.7.1"
+__version__ = "1.8.0"
 __author__ = "EntropyGuard Team"
 
 from typing import Final

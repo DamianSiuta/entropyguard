@@ -3,7 +3,7 @@ Pipeline class for orchestrating the complete EntropyGuard workflow.
 
 Coordinates: Ingestion -> Validation -> Sanitization -> Deduplication -> Validation -> Output
 
-v1.7.1: Production hardening - atomic writes, disk full handling, model validation.
+v1.8.0: GDPR compliance - added timestamps to audit logs.
 """
 
 from __future__ import annotations
@@ -11,12 +11,14 @@ from __future__ import annotations
 import gc
 import json
 import os
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 import numpy as np
 import polars as pl
 from tqdm import tqdm
 
+from entropyguard import __version__
 from entropyguard.ingestion import load_dataset
 from entropyguard.validation import DataValidator
 from entropyguard.sanitization import sanitize_dataframe, SanitizationConfig
@@ -40,7 +42,7 @@ class Pipeline:
        - Append to output file
     4. Save audit log
 
-    v1.7.1: Implements batch processing for scalability with production hardening.
+    v1.8.0: Implements batch processing for scalability with production hardening and GDPR compliance.
     """
 
     def __init__(self, model_name: str = "all-MiniLM-L6-v2", batch_size: int = 10000) -> None:
@@ -101,6 +103,9 @@ class Pipeline:
         try:
             # Reset audit trail for this run
             self.audit_events = []
+            # Get current timestamp and version for GDPR compliance (used throughout pipeline)
+            current_timestamp = datetime.now(timezone.utc).isoformat()
+            entropyguard_version = __version__
 
             # Step 1: Load dataset (lazy) - DO NOT materialize yet
             lf = load_dataset(input_path)
@@ -282,6 +287,8 @@ class Pipeline:
                                     "row_index": orig_idx,
                                     "reason": "Duplicate",
                                     "details": f"Duplicate of vector from previous batch (index {neighbor_global_idx})",
+                                    "timestamp": current_timestamp,
+                                    "entropyguard_version": entropyguard_version,
                                 }
                             )
                             break  # Found duplicate, no need to check more neighbors
@@ -298,6 +305,8 @@ class Pipeline:
                                         "row_index": orig_idx,
                                         "reason": "Duplicate",
                                         "details": f"Duplicate of original row {other_orig_idx}",
+                                        "timestamp": current_timestamp,
+                                        "entropyguard_version": entropyguard_version,
                                     }
                                 )
                                 break  # Found duplicate, no need to check more
@@ -332,6 +341,8 @@ class Pipeline:
                                 "row_index": int(orig_idx),
                                 "reason": "Validation: empty_or_null",
                                 "details": "len=null",
+                                "timestamp": current_timestamp,
+                                "entropyguard_version": entropyguard_version,
                             }
                         )
                         continue
@@ -346,6 +357,8 @@ class Pipeline:
                                 "row_index": int(orig_idx),
                                 "reason": "Validation: empty_or_null",
                                 "details": f"len={length}",
+                                "timestamp": current_timestamp,
+                                "entropyguard_version": entropyguard_version,
                             }
                         )
                         continue
@@ -356,6 +369,8 @@ class Pipeline:
                                 "row_index": int(orig_idx),
                                 "reason": "Validation: too_short",
                                 "details": f"len={length} (min_length={min_length})",
+                                "timestamp": current_timestamp,
+                                "entropyguard_version": entropyguard_version,
                             }
                         )
 
