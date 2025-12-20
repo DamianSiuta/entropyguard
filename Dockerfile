@@ -1,39 +1,35 @@
 FROM python:3.10-slim
 
+# Set env vars
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     HF_HOME=/app/.cache/huggingface
 
 WORKDIR /app
 
-# 1. Install system dependencies
+# 1. Install system dependencies (Root)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libgomp1 \
     git \
  && rm -rf /var/lib/apt/lists/*
 
-# 2. Create user
+# 2. Create user (UID 1000)
 RUN useradd -m -u 1000 entropyguard
 
-# 3. Setup directories & permissions (PRE-COPY)
+# 3. Create cache directory with correct permissions
 RUN mkdir -p $HF_HOME && chown -R entropyguard:entropyguard /app
 
-# 4. Copy files
-COPY pyproject.toml README.md ./
-COPY src ./src
-COPY scripts ./scripts
+# 4. Copy project files AND set ownership immediately (Atomic Copy)
+# This prevents permission issues during build
+COPY --chown=entropyguard:entropyguard . .
 
-# 5. Install dependencies (Global pip is fine in container)
+# 5. Install dependencies (Root installs to global site-packages, readable by all)
 RUN pip install --upgrade pip && \
     pip install .
 
-# 6. Fix permissions (POST-COPY) - Critical step!
-# Ensure entropyguard owns everything we just copied/installed in /app
-RUN chown -R entropyguard:entropyguard /app
-
-# 7. Switch user
+# 6. Switch to non-root user
 USER entropyguard
 
-# 8. Entrypoint
+# 7. Entrypoint
 ENTRYPOINT ["python", "scripts/ci_entrypoint.py"]
