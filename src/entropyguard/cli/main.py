@@ -23,6 +23,7 @@ if sys.platform == "win32":
     if hasattr(sys.stderr, 'reconfigure'):
         sys.stderr.reconfigure(encoding='utf-8')
 
+from entropyguard import __version__
 from entropyguard.cli.pipeline import Pipeline
 
 
