@@ -5,9 +5,13 @@ Provides CLI tools for data sanitization workflows.
 """
 
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
+from typing import Any
+from urllib import request
+from urllib.error import HTTPError, URLError
 
 import polars as pl
 
