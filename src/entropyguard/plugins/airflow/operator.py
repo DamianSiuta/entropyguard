@@ -137,6 +137,41 @@ class EntropyGuardOperator(BaseOperator):
         logger.info(f"   Min length: {self.min_length}")
         logger.info(f"   Fail on duplicates: {self.fail_on_duplicates}")
 
+        # Auto-detect text column if not provided (same logic as CLI)
+        text_column = self.text_column
+        if not text_column:
+            from entropyguard.ingestion import load_dataset
+            import polars as pl
+
+            try:
+                lf = load_dataset(self.input_path)
+                df_head = lf.head(100).collect()
+                string_cols = [
+                    col for col in df_head.columns if df_head[col].dtype == pl.Utf8
+                ]
+
+                if not string_cols:
+                    raise AirflowException(
+                        "Unable to auto-detect text column (no string columns found). "
+                        "Please provide text_column argument."
+                    )
+
+                # Choose column with longest average string length
+                best_col = string_cols[0]
+                best_avg_len = -1.0
+                for col in string_cols:
+                    lengths = df_head[col].cast(pl.Utf8).str.len_chars()
+                    if len(lengths) > 0:
+                        avg_len = float(lengths.mean())
+                        if avg_len > best_avg_len:
+                            best_avg_len = avg_len
+                            best_col = col
+
+                text_column = best_col
+                logger.info(f"⚠️  Auto-detected text column: '{text_column}'")
+            except Exception as e:
+                raise AirflowException(f"Failed to auto-detect text column: {e}")
+
         # Initialize pipeline
         pipeline = Pipeline(model_name=self.model_name, batch_size=self.batch_size)
 
@@ -144,7 +179,7 @@ class EntropyGuardOperator(BaseOperator):
         result = pipeline.run(
             input_path=self.input_path,
             output_path=self.output_path,
-            text_column=self.text_column or "",  # Auto-detect if None
+            text_column=text_column,
             required_columns=None,
             min_length=self.min_length,
             dedup_threshold=self.dedup_threshold,
