@@ -373,4 +373,40 @@ The following examples demonstrate EntropyGuard's ability to identify semantical
 
 ---
 
+## 🧩 Editions & Pricing
+
+EntropyGuard is available in two editions to meet different organizational needs:
+
+| Feature | **Community Edition** (Open Source) | **Enterprise Platform** (Commercial) |
+| :--- | :---: | :---: |
+| **License** | MIT (Free forever) | Commercial License |
+| **Core Engine** | ✅ Local CPU Execution | ✅ Local CPU Execution |
+| **Ingestion** | ✅ Excel, Parquet, JSONL | ✅ Excel, Parquet, JSONL |
+| **Deduplication** | ✅ Semantic (FAISS) | ✅ Semantic (FAISS) |
+| **Orchestration** | ✅ GitHub Actions & Airflow | ✅ GitHub Actions & Airflow |
+| **Audit Logs** | ⚠️ Local JSON Files | ✅ **Centralized Control Plane** |
+| **Governance** | ❌ None | ✅ **SSO (SAML/OIDC)** |
+| **Reporting** | ❌ Manual | ✅ **Executive Dashboards** |
+| **Integrations** | ❌ CLI only | ✅ **SharePoint / Salesforce** |
+| **Support** | Community (GitHub Issues) | SLA (24/7) |
+
+### 🎯 Which Edition Should You Choose?
+
+**Community Edition** is perfect for:
+- Individual developers and small teams
+- Open-source projects
+- Proof-of-concept and experimentation
+- Organizations with basic data quality needs
+
+**Enterprise Platform** is designed for:
+- Large organizations requiring centralized governance
+- Regulated industries (banking, healthcare, finance)
+- Multi-pipeline environments needing unified control
+- Teams requiring enterprise support and SLAs
+
+> **Need centralized governance for multiple pipelines?**  
+> [Contact us for Enterprise Early Access](mailto:enterprise@entropyguard.ai) or check the [Roadmap](ROADMAP_TO_UNICORN.md).
+
+---
+
 *Built for high-efficiency data engineering. Enterprise-ready. Production-proven.* 🚀
