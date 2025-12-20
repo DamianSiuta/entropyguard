@@ -26,17 +26,34 @@ COPY --chown=entropyguard:entropyguard pyproject.toml README.md ./
 COPY --chown=entropyguard:entropyguard src ./src
 COPY --chown=entropyguard:entropyguard scripts ./scripts
 
-# 5. Install dependencies (Root installs to global site-packages, readable by all)
+# 5. Debug: List files to verify copy worked
+RUN echo "=== Files in /app ===" && \
+    ls -la /app && \
+    echo "=== Files in /app/scripts ===" && \
+    ls -la /app/scripts && \
+    echo "=== pyproject.toml exists ===" && \
+    test -f /app/pyproject.toml && echo "YES" || echo "NO"
+
+# 6. Install dependencies (Root installs to global site-packages, readable by all)
 RUN pip install --upgrade pip && \
-    pip install .
+    pip install --verbose . || \
+    (echo "=== PIP INSTALL FAILED ===" && \
+     echo "=== Contents of /app ===" && \
+     ls -la /app && \
+     echo "=== Contents of pyproject.toml ===" && \
+     cat /app/pyproject.toml && \
+     exit 1)
 
-# 6. Verify entrypoint exists and set permissions
+# 7. Verify entrypoint exists and set permissions
 RUN test -f /app/scripts/ci_entrypoint.py && \
-    chmod +x /app/scripts/ci_entrypoint.py || \
-    (echo "ERROR: ci_entrypoint.py not found!" && exit 1)
+    chmod +x /app/scripts/ci_entrypoint.py && \
+    echo "=== Entrypoint verified ===" || \
+    (echo "ERROR: ci_entrypoint.py not found!" && \
+     ls -la /app/scripts/ && \
+     exit 1)
 
-# 7. Switch to non-root user
+# 8. Switch to non-root user
 USER entropyguard
 
-# 8. Entrypoint (use absolute path)
+# 9. Entrypoint (use absolute path)
 ENTRYPOINT ["python", "/app/scripts/ci_entrypoint.py"]
