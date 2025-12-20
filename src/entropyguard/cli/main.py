@@ -282,6 +282,28 @@ Examples:
         print(f"   Required columns: {', '.join(required_columns)}")
     print()
 
+    # Validate model name at startup (fail fast - v1.7.1)
+    print("🔍 Validating model...", end=" ", flush=True)
+    try:
+        from sentence_transformers import SentenceTransformer
+
+        # Try to load model (this will fail fast if invalid)
+        test_model = SentenceTransformer(args.model_name)
+        del test_model  # Free memory immediately
+        print("✅")
+    except Exception as e:
+        print("❌")
+        print(
+            f"ERROR: Invalid model name '{args.model_name}' or connection failed.",
+            file=sys.stderr,
+        )
+        print(f"Details: {str(e)}", file=sys.stderr)
+        print(
+            "Please check the model name and ensure you have internet access (for first download).",
+            file=sys.stderr,
+        )
+        return 1
+
     pipeline = Pipeline(model_name=args.model_name, batch_size=args.batch_size)
     result = pipeline.run(
         input_path=args.input,

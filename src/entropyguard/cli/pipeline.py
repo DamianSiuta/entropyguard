@@ -3,7 +3,7 @@ Pipeline class for orchestrating the complete EntropyGuard workflow.
 
 Coordinates: Ingestion -> Validation -> Sanitization -> Deduplication -> Validation -> Output
 
-v1.7.0: Refactored for batch processing to handle datasets larger than RAM.
+v1.7.1: Production hardening - atomic writes, disk full handling, model validation.
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ class Pipeline:
        - Append to output file
     4. Save audit log
 
-    v1.7.0: Implements batch processing for scalability.
+    v1.7.1: Implements batch processing for scalability with production hardening.
     """
 
     def __init__(self, model_name: str = "all-MiniLM-L6-v2", batch_size: int = 10000) -> None:
@@ -113,9 +113,10 @@ class Pipeline:
                 # If count is expensive, we'll estimate from first batch
                 total_rows_estimate = None
 
-            # Initialize output file (truncate if exists, we'll append batches)
-            if os.path.exists(output_path):
-                os.remove(output_path)
+            # Initialize output file (use temp file for atomic writes)
+            temp_output_path = output_path + ".tmp"
+            if os.path.exists(temp_output_path):
+                os.remove(temp_output_path)
 
             # Initialize index for cross-batch deduplication
             # Convert cosine similarity threshold to squared L2 distance threshold
@@ -392,14 +393,38 @@ class Pipeline:
                         else:
                             stats["validation_report"][key] = value
 
-                # Step 7: Append batch results to output file
+                # Step 7: Append batch results to output file (atomic write with disk full handling)
                 if df.height > 0:
                     # Remove _original_index before writing (internal column, not needed in output)
                     df_output = df.drop("_original_index") if "_original_index" in df.columns else df
                     # Use append mode for NDJSON (Polars doesn't support append, so we write manually)
-                    with open(output_path, "a", encoding="utf-8") as f:
-                        for row in df_output.iter_rows(named=True):
-                            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+                    # Write to temp file for atomic operation
+                    try:
+                        with open(temp_output_path, "a", encoding="utf-8") as f:
+                            for row in df_output.iter_rows(named=True):
+                                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+                    except OSError as e:
+                        if e.errno == 28:  # No space left on device
+                            progress_bar.close()
+                            # Clean up temp file
+                            if os.path.exists(temp_output_path):
+                                try:
+                                    os.remove(temp_output_path)
+                                except Exception:
+                                    pass  # Ignore cleanup errors
+                            return {
+                                "success": False,
+                                "output_path": output_path,
+                                "stats": stats,
+                                "error": (
+                                    f"CRITICAL ERROR: Disk full during write. "
+                                    f"Processed {batch_num} batches ({stats.get('loaded_rows', 0)} rows) before failure. "
+                                    f"Temporary file cleaned up. Please free disk space and retry."
+                                ),
+                            }
+                        else:
+                            # Re-raise other OSErrors
+                            raise
 
                 # Clear batch data to free memory
                 del df, texts, embeddings
@@ -411,7 +436,33 @@ class Pipeline:
 
             progress_bar.close()
 
-            # Step 8: Persist audit log (if requested)
+            # Step 8: Atomically move temp file to final output path
+            if os.path.exists(temp_output_path):
+                try:
+                    # Atomic move (rename) - works on same filesystem
+                    os.replace(temp_output_path, output_path)
+                except OSError as e:
+                    if e.errno == 28:  # No space left on device
+                        # Clean up temp file
+                        if os.path.exists(temp_output_path):
+                            try:
+                                os.remove(temp_output_path)
+                            except Exception:
+                                pass
+                        return {
+                            "success": False,
+                            "output_path": output_path,
+                            "stats": stats,
+                            "error": (
+                                f"CRITICAL ERROR: Disk full during final write. "
+                                f"Processed {stats.get('batches_processed', 0)} batches successfully. "
+                                f"Temporary file cleaned up. Please free disk space and retry."
+                            ),
+                        }
+                    else:
+                        raise
+
+            # Step 9: Persist audit log (if requested)
             if audit_log_path is not None:
                 try:
                     with open(audit_log_path, "w", encoding="utf-8") as f:
