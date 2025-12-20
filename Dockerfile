@@ -19,6 +19,7 @@ RUN useradd -m -u 1000 entropyguard && \
 # Copy project metadata and source
 COPY --chown=entropyguard:entropyguard pyproject.toml README.md ./
 COPY --chown=entropyguard:entropyguard src ./src
+COPY --chown=entropyguard:entropyguard scripts ./scripts
 
 # Install the project as a package using pip (Poetry not required at runtime)
 RUN pip install --upgrade pip && \
@@ -27,7 +28,11 @@ RUN pip install --upgrade pip && \
 # Switch to non-root user
 USER entropyguard
 
-# Default entrypoint: run the EntropyGuard CLI
-ENTRYPOINT ["python", "-m", "entropyguard.cli.main"]
+# Make CI entrypoint executable (for GitHub Actions)
+RUN chmod +x /app/scripts/ci_entrypoint.py || true
+
+# Default entrypoint: run the CI entrypoint (which handles both CLI and GitHub Actions)
+# The CI entrypoint will detect if it's running in GitHub Actions mode
+ENTRYPOINT ["python", "/app/scripts/ci_entrypoint.py"]
 
 

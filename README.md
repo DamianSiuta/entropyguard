@@ -105,6 +105,75 @@ Run the pipeline against mounted data (any supported format: `.xlsx`, `.parquet`
 docker run -v $(pwd)/data:/data entropyguard --input /data/file.xlsx --output /data/clean.parquet
 ```
 
+## 🧱 CI/CD Integration (The RAG Firewall)
+
+EntropyGuard can act as an **automatic gatekeeper** in your CI/CD pipeline, blocking Pull Requests if data quality checks fail. This prevents poisoned or low-quality data from entering your Vector DB or LLM training pipeline.
+
+### How It Works
+
+When integrated into GitHub Actions, EntropyGuard runs as a mandatory quality check:
+- ✅ **Validates** data before it reaches production
+- ✅ **Blocks merges** if duplicates or validation errors are found
+- ✅ **Generates audit logs** for compliance and debugging
+- ✅ **Fails fast** with clear error messages
+
+### Quick Setup (3 Lines of YAML)
+
+Add this to your `.github/workflows/data_quality.yml`:
+
+```yaml
+name: Data Quality Check
+on: [push, pull_request]
+
+jobs:
+  rag-firewall:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: 🛡️ Run EntropyGuard
+        uses: DamianSiuta/entropyguard@v1.9.0
+        with:
+          input_file: 'data/raw_data.jsonl'
+          fail_on_duplicates: 'true'
+          dedup_threshold: '0.85'
+```
+
+### GitHub Action Parameters
+
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `input_file` | ✅ Yes | – | Path to input data file (relative to repository root) |
+| `output_file` | No | `''` | Path to output cleaned data file (optional, for testing) |
+| `text_column` | No | Auto-detected | Name of the text column to process |
+| `dedup_threshold` | No | `0.85` | Similarity threshold for deduplication (0.0-1.0) |
+| `min_length` | No | `50` | Minimum text length after sanitization |
+| `fail_on_duplicates` | No | `true` | If `true`, block merge when duplicates or bad rows are found |
+| `audit_log` | No | `audit.json` | Path to audit log file (uploaded as artifact) |
+| `model_name` | No | `all-MiniLM-L6-v2` | Sentence-transformers model name |
+| `batch_size` | No | `10000` | Number of rows to process per batch |
+
+### Example: Blocking Bad Data
+
+If EntropyGuard finds duplicates or validation errors, the action will:
+1. ❌ **Fail the CI check** (exit code 1)
+2. 📊 **Generate audit log** with details of all issues
+3. 🚨 **Display error message** in GitHub Actions UI:
+   ```
+   🚨 BLOCKING MERGE: Data quality check FAILED!
+   Found 5 duplicate(s)
+   Found 2 validation error(s)
+   ```
+
+The Pull Request will be **blocked** until data quality issues are resolved.
+
+### Use Cases
+
+- **RAG Pipelines:** Prevent duplicate or poisoned documents from entering Vector DB
+- **LLM Training:** Ensure only high-quality data reaches training datasets
+- **Data Compliance:** Automatically enforce data quality standards in CI/CD
+- **Enterprise Workflows:** Mandatory quality gates for regulated industries
+
 ## 📊 Architecture
 
 The EntropyGuard pipeline follows a structured, modular architecture that processes data through sequential stages:

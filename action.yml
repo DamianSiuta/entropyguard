@@ -1,0 +1,66 @@
+name: 'EntropyGuard - RAG Firewall'
+description: 'Block CI/CD if data quality fails. Prevents poisoned data from entering Vector DB.'
+branding:
+  icon: 'shield'
+  color: 'red'
+
+inputs:
+  input_file:
+    description: 'Path to input data file (relative to workspace root)'
+    required: true
+  output_file:
+    description: 'Path to output cleaned data file (optional, for testing)'
+    required: false
+    default: ''
+  text_column:
+    description: 'Name of the text column to process (auto-detected if not provided)'
+    required: false
+    default: ''
+  dedup_threshold:
+    description: 'Similarity threshold for deduplication (0.0-1.0, default: 0.85)'
+    required: false
+    default: '0.85'
+  min_length:
+    description: 'Minimum text length after sanitization (default: 50)'
+    required: false
+    default: '50'
+  fail_on_duplicates:
+    description: 'If true, block merge when duplicates or bad rows are found (default: true)'
+    required: false
+    default: 'true'
+  audit_log:
+    description: 'Path to audit log file (default: audit.json in workspace root)'
+    required: false
+    default: 'audit.json'
+  model_name:
+    description: 'Sentence-transformers model name (default: all-MiniLM-L6-v2)'
+    required: false
+    default: 'all-MiniLM-L6-v2'
+  batch_size:
+    description: 'Number of rows to process per batch (default: 10000)'
+    required: false
+    default: '10000'
+
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
+  env:
+    INPUT_INPUT_FILE: ${{ inputs.input_file }}
+    INPUT_OUTPUT_FILE: ${{ inputs.output_file }}
+    INPUT_TEXT_COLUMN: ${{ inputs.text_column }}
+    INPUT_DEDUP_THRESHOLD: ${{ inputs.dedup_threshold }}
+    INPUT_MIN_LENGTH: ${{ inputs.min_length }}
+    INPUT_FAIL_ON_DUPLICATES: ${{ inputs.fail_on_duplicates }}
+    INPUT_AUDIT_LOG: ${{ inputs.audit_log }}
+    INPUT_MODEL_NAME: ${{ inputs.model_name }}
+    INPUT_BATCH_SIZE: ${{ inputs.batch_size }}
+  args:
+    - ${{ inputs.input_file }}
+    - ${{ inputs.output_file }}
+    - ${{ inputs.text_column }}
+    - ${{ inputs.dedup_threshold }}
+    - ${{ inputs.min_length }}
+    - ${{ inputs.fail_on_duplicates }}
+    - ${{ inputs.audit_log }}
+    - ${{ inputs.model_name }}
+    - ${{ inputs.batch_size }}
