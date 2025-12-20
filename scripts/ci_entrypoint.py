@@ -15,6 +15,36 @@ from pathlib import Path
 # GitHub Actions mounts the workspace at /github/workspace
 WORKSPACE_ROOT = Path(os.environ.get("GITHUB_WORKSPACE", "/github/workspace"))
 
+
+def check_write_permissions(path: Path) -> bool:
+    """Check if we have write permissions to the directory containing the path."""
+    # Get parent directory (or the path itself if it's a directory)
+    if path.is_file() or path.suffix:
+        dir_path = path.parent
+    else:
+        dir_path = path
+    
+    # Check if directory exists and is writable
+    if not dir_path.exists():
+        # Try to create it (might fail due to permissions)
+        try:
+            dir_path.mkdir(parents=True, exist_ok=True)
+        except (PermissionError, OSError):
+            return False
+    
+    # Check write permission
+    return os.access(dir_path, os.W_OK)
+
+
+def get_fallback_path(original_path: Path, fallback_name: str) -> Path:
+    """Get fallback path in /tmp if original is not writable."""
+    if check_write_permissions(original_path):
+        return original_path
+    else:
+        fallback = Path("/tmp") / fallback_name
+        print(f"⚠️  Workspace not writable. Redirecting output to {fallback}", file=sys.stderr)
+        return fallback
+
 # Read inputs from environment variables (GitHub Actions convention)
 # GitHub Actions automatically converts inputs to INPUT_* environment variables
 INPUT_FILE = os.environ.get("INPUT_INPUT_FILE", "")
@@ -70,13 +100,17 @@ def main() -> int:
 
     # Set output path (if not provided, use input path with .clean suffix)
     if OUTPUT_FILE:
-        output_path = WORKSPACE_ROOT / OUTPUT_FILE
+        original_output_path = WORKSPACE_ROOT / OUTPUT_FILE
     else:
         # Default: don't write output in CI (we only care about validation)
-        output_path = WORKSPACE_ROOT / ".entropyguard_output.jsonl"
+        original_output_path = WORKSPACE_ROOT / ".entropyguard_output.jsonl"
 
     # Set audit log path
-    audit_log_path = WORKSPACE_ROOT / AUDIT_LOG
+    original_audit_log_path = WORKSPACE_ROOT / AUDIT_LOG
+
+    # Smart Fallback: Check write permissions and redirect to /tmp if needed
+    output_path = get_fallback_path(original_output_path, "entropyguard_output.jsonl")
+    audit_log_path = get_fallback_path(original_audit_log_path, "audit.json")
 
     print(f"📁 Input file:  {input_path}")
     print(f"📁 Output file: {output_path}")
