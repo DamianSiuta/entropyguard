@@ -1,42 +1,39 @@
 FROM python:3.10-slim
 
-# Ensure stdout/stderr are unbuffered for better logging in containers
 ENV PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    HF_HOME=/app/.cache/huggingface
 
 WORKDIR /app
 
-# System dependencies for scientific Python stack (numpy, pyarrow, faiss, torch, etc.)
+# 1. Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libgomp1 \
+    git \
  && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user for security (hardening)
-RUN useradd -m -u 1000 entropyguard && \
-    chown -R entropyguard:entropyguard /app
+# 2. Create user
+RUN useradd -m -u 1000 entropyguard
 
-# Create cache directory for HuggingFace models (fixes PermissionError in GitHub Actions)
-ENV HF_HOME=/app/.cache/huggingface
+# 3. Setup directories & permissions (PRE-COPY)
 RUN mkdir -p $HF_HOME && chown -R entropyguard:entropyguard /app
 
-# Copy project metadata and source
-COPY --chown=entropyguard:entropyguard pyproject.toml README.md ./
-COPY --chown=entropyguard:entropyguard src ./src
-COPY --chown=entropyguard:entropyguard scripts ./scripts
+# 4. Copy files
+COPY pyproject.toml README.md ./
+COPY src ./src
+COPY scripts ./scripts
 
-# Install the project as a package using pip (Poetry not required at runtime)
+# 5. Install dependencies (Global pip is fine in container)
 RUN pip install --upgrade pip && \
     pip install .
 
-# Switch to non-root user
+# 6. Fix permissions (POST-COPY) - Critical step!
+# Ensure entropyguard owns everything we just copied/installed in /app
+RUN chown -R entropyguard:entropyguard /app
+
+# 7. Switch user
 USER entropyguard
 
-# Make CI entrypoint executable (for GitHub Actions)
-RUN chmod +x /app/scripts/ci_entrypoint.py || true
-
-# Default entrypoint: run the CI entrypoint (which handles both CLI and GitHub Actions)
-# The CI entrypoint will detect if it's running in GitHub Actions mode
-ENTRYPOINT ["python", "/app/scripts/ci_entrypoint.py"]
-
-
+# 8. Entrypoint
+ENTRYPOINT ["python", "scripts/ci_entrypoint.py"]
