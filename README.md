@@ -126,12 +126,13 @@ The EntropyGuard pipeline follows a structured, modular architecture that proces
 
 **Pipeline Stages:**
 1. **Ingestion:** Loads data from Excel, Parquet, CSV, and JSONL/NDJSON into a unified lazy representation.
-2. **Validation:** Applies quality gates to filter out invalid entries before expensive processing.
-3. **Sanitization:** Removes PII, HTML tags, and noise using configurable, enterprise-safe rules.
-4. **Chunking (Optional):** Splits long texts into smaller, overlapping fragments using a recursive delimiter-aware strategy. Enabled when `--chunk-size` is provided. Critical for RAG workflows.
-5. **Vector Embedding:** Generates semantic embeddings using `sentence-transformers` with a configurable `--model-name` for monolingual or multilingual workloads.
-6. **FAISS Deduplication:** Identifies and removes semantically similar duplicates at scale using FAISS.
-7. **Clean Data:** Outputs optimized, high-quality dataset suitable for LLM training or analytics workloads.
+2. **Batch Processing (v1.7.0):** Processes data in configurable batches (default: 10,000 rows) to handle datasets larger than RAM. Each batch is validated, sanitized, embedded, and deduplicated against all previous batches before being written to disk.
+3. **Validation:** Applies quality gates to filter out invalid entries before expensive processing.
+4. **Sanitization:** Removes PII, HTML tags, and noise using configurable, enterprise-safe rules.
+5. **Chunking (Optional):** Splits long texts into smaller, overlapping fragments using a recursive delimiter-aware strategy. Enabled when `--chunk-size` is provided. Critical for RAG workflows.
+6. **Vector Embedding:** Generates semantic embeddings using `sentence-transformers` with a configurable `--model-name` for monolingual or multilingual workloads.
+7. **FAISS Deduplication:** Identifies and removes semantically similar duplicates at scale using FAISS. Cross-batch deduplication ensures duplicates are detected even when they appear in different batches.
+8. **Clean Data:** Outputs optimized, high-quality dataset suitable for LLM training or analytics workloads.
 
 ## 📜 Audit Log & Compliance
 
@@ -182,6 +183,7 @@ All options for `python -m entropyguard.cli.main` (or the `entropyguard` entrypo
 | `--text-column`     | No       | Auto-detected         | Name of the text column to process. **Optional** – auto-detected if not provided.            |
 | `--audit-log`       | No       | `None`                | Path to JSON file with audit entries for dropped/duplicate rows (compliance & traceability). |
 | `--dedup-threshold` | No       | `0.85` (recommended)  | Similarity threshold for deduplication (0.0–1.0). Higher = stricter (fewer duplicates found). |
+| `--batch-size`      | No       | `10000`               | Number of rows to process in memory at once. Lower this to reduce RAM usage.                  |
 | `--min-length`      | No       | `50`                  | Minimum text length (characters) after sanitization. Shorter rows are dropped.               |
 | `--chunk-size`      | No       | `None` (disabled)     | Optional chunk size (characters) for splitting long texts before embedding. Recommended: 512 for RAG. |
 | `--chunk-overlap`   | No       | `50`                  | Overlap size (characters) between consecutive chunks. Only used if `--chunk-size` is set.     |
