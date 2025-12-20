@@ -21,7 +21,7 @@ RUN useradd -m -u 1000 entropyguard
 RUN mkdir -p $HF_HOME && chown -R entropyguard:entropyguard /app
 
 # 4. Copy project files AND set ownership immediately (Atomic Copy)
-# Copy essential files first
+# Copy essential files explicitly to avoid issues with .dockerignore
 COPY --chown=entropyguard:entropyguard pyproject.toml README.md ./
 COPY --chown=entropyguard:entropyguard src ./src
 COPY --chown=entropyguard:entropyguard scripts ./scripts
@@ -30,9 +30,10 @@ COPY --chown=entropyguard:entropyguard scripts ./scripts
 RUN pip install --upgrade pip && \
     pip install .
 
-# 6. Verify entrypoint exists and is executable
-RUN ls -la /app/scripts/ci_entrypoint.py && \
-    chmod +x /app/scripts/ci_entrypoint.py
+# 6. Verify entrypoint exists and set permissions
+RUN test -f /app/scripts/ci_entrypoint.py && \
+    chmod +x /app/scripts/ci_entrypoint.py || \
+    (echo "ERROR: ci_entrypoint.py not found!" && exit 1)
 
 # 7. Switch to non-root user
 USER entropyguard
