@@ -22,6 +22,59 @@ if sys.platform == "win32":
 from entropyguard.cli.pipeline import Pipeline
 
 
+def _send_audit_to_server(server_url: str, audit_events: list[dict[str, Any]]) -> None:
+    """
+    Send audit events to EntropyGuard Control Plane server.
+    
+    Args:
+        server_url: URL of the Control Plane API endpoint
+        audit_events: List of audit event dictionaries
+    """
+    if not audit_events:
+        return  # Nothing to send
+    
+    # Prepare payload
+    payload = {
+        "user_id": None,  # TODO: Get from environment or config
+        "pipeline_id": None,  # TODO: Generate unique pipeline ID
+        "audit_events": audit_events,
+        "metadata": {
+            "entropyguard_version": __version__,
+        },
+    }
+    
+    # Convert to JSON
+    json_data = json.dumps(payload).encode("utf-8")
+    
+    # Create HTTP request
+    req = request.Request(
+        server_url,
+        data=json_data,
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": "EntropyGuard-CLI/1.0",
+        },
+        method="POST",
+    )
+    
+    try:
+        # Send request
+        with request.urlopen(req, timeout=10) as response:
+            if response.status == 200:
+                print("📡 Audit log uploaded to Control Plane successfully")
+            else:
+                print(
+                    f"⚠️  Warning: Server returned status {response.status}",
+                    file=sys.stderr,
+                )
+    except HTTPError as e:
+        raise Exception(f"HTTP error {e.code}: {e.reason}")
+    except URLError as e:
+        raise Exception(f"Connection error: {e.reason}")
+    except Exception as e:
+        raise Exception(f"Unexpected error: {str(e)}")
+
+
 def main() -> int:
     """
     Main entry point for EntropyGuard CLI.
@@ -122,6 +175,17 @@ Examples:
         help=(
             "Optional path to a JSON file where an audit log of dropped/duplicate rows "
             "will be written. Helps with compliance and data lineage."
+        ),
+    )
+
+    parser.add_argument(
+        "--server-url",
+        type=str,
+        default=None,
+        help=(
+            "Optional URL of EntropyGuard Control Plane server. "
+            "If provided, audit logs will be sent to this server via HTTP POST. "
+            "Example: --server-url https://api.entropyguard.com/api/v1/telemetry/audit"
         ),
     )
 

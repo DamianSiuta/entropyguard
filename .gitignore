@@ -80,3 +80,6 @@ AUDIT_REPORT*.md
 AUDIT_REPORT_FINAL.md
 STRATEGIC_AUDIT*.md
 UNICORN_STRATEGY.md
+
+# Proprietary Source Code (DO NOT COMMIT)
+control-plane/
