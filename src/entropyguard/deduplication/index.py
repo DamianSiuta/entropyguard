@@ -82,13 +82,38 @@ class VectorIndex:
         if vectors.dtype != np.float32:
             vectors = vectors.astype(np.float32)
 
+        # Filter out zero vectors (edge case: empty text or degenerate embeddings)
+        # Zero vectors would cause false positives in duplicate detection
+        valid_indices = []
+        for i in range(vectors.shape[0]):
+            vector = vectors[i]
+            # Check if vector is non-zero (L2 norm > epsilon)
+            norm_squared = np.dot(vector, vector)
+            if norm_squared > 1e-8:  # Epsilon threshold for numerical stability
+                valid_indices.append(i)
+            else:
+                # Log warning for zero vector (but don't fail - just skip it)
+                import warnings
+                warnings.warn(
+                    f"Skipping zero vector at index {i} (likely from empty text or degenerate embedding)",
+                    UserWarning,
+                    stacklevel=2
+                )
+
+        if not valid_indices:
+            # All vectors were zero - nothing to add
+            return
+
+        # Filter to only valid (non-zero) vectors
+        valid_vectors = vectors[valid_indices]
+
         # Add to FAISS index
-        self._index.add(vectors)
-        self._vector_count += vectors.shape[0]
+        self._index.add(valid_vectors)
+        self._vector_count += valid_vectors.shape[0]
 
         # Store vectors for duplicate detection
-        for i in range(vectors.shape[0]):
-            self._vectors.append(vectors[i].copy())
+        for i in range(valid_vectors.shape[0]):
+            self._vectors.append(valid_vectors[i].copy())
 
     def search(
         self, query_vector: np.ndarray, k: int = 10
@@ -140,20 +165,26 @@ class VectorIndex:
         """
         Find duplicate vectors based on distance threshold.
 
-        Uses L2 (Euclidean) distance. Vectors with distance <= threshold are considered duplicates.
+        Uses L2 (Euclidean) distance squared. Vectors with squared distance <= threshold
+        are considered duplicates.
 
         Args:
-            threshold: Maximum distance for vectors to be considered duplicates.
+            threshold: Maximum SQUARED distance for vectors to be considered duplicates.
+                      This should be the squared L2 distance threshold.
+                      For normalized vectors with cosine similarity 'sim':
+                        threshold = 2 * (1 - sim)
                       Lower values = stricter (fewer duplicates found).
-                      Typical range: 0.1-0.5 for normalized embeddings.
+                      Typical range: 0.02-0.2 for normalized embeddings (corresponds to
+                      cosine similarity 0.99-0.90).
 
         Returns:
             List of sets, where each set contains indices of duplicate vectors.
             Each vector appears in at most one set.
 
         Note:
-            This uses a simple clustering approach: for each vector, find all neighbors
-            within threshold distance and group them together.
+            FAISS IndexFlatL2.search() returns SQUARED distances, not distances.
+            For L2-normalized vectors: d² = 2(1 - cosine_similarity)
+            This method compares squared distances directly (no square root needed).
         """
         if self._vector_count == 0:
             return []
@@ -210,12 +241,17 @@ class VectorIndex:
         Internal method to find duplicates using stored vectors.
 
         Uses a union-find approach to group vectors within threshold distance.
+
+        Args:
+            threshold: Maximum SQUARED L2 distance (already squared, no conversion needed).
+                      FAISS returns squared distances, so we compare directly.
         """
         if len(self._vectors) == 0:
             return []
 
-        # Convert threshold to squared distance (L2 distance squared)
-        threshold_squared = threshold * threshold
+        # Threshold is already squared (passed from find_duplicates)
+        # FAISS IndexFlatL2.search() returns squared distances, so we compare directly
+        threshold_squared = threshold
 
         # Union-Find data structure for grouping
         parent = list(range(len(self._vectors)))

@@ -175,17 +175,17 @@ class Pipeline:
             embeddings = self.embedder.embed(texts)
 
             # Build index and find duplicates
-            # Note: FAISS uses L2 distance, so we need to convert similarity threshold
-            # For normalized embeddings, cosine similarity ≈ 1 - (L2^2 / 2)
-            # We'll use a distance threshold based on the similarity threshold
-            # Higher similarity (0.95) = lower distance threshold
-            # For normalized vectors, distance threshold ≈ sqrt(2 * (1 - similarity))
+            # Mathematical conversion: For L2-normalized vectors, cosine similarity relates to L2 distance:
+            #   cosine_similarity = 1 - (L2_distance² / 2)
+            #   Therefore: L2_distance² = 2 * (1 - cosine_similarity)
+            # CRITICAL: FAISS IndexFlatL2.search() returns SQUARED distances, not distances!
+            # So we compute threshold_squared directly (no square root needed).
             self.index = VectorIndex(dimension=384)
             self.index.add_vectors(embeddings)
-            # Convert similarity threshold to distance threshold
-            # For cosine similarity on normalized vectors: dist ≈ sqrt(2 * (1 - sim))
-            distance_threshold = (2.0 * (1.0 - dedup_threshold)) ** 0.5
-            duplicate_groups = self.index.find_duplicates(threshold=distance_threshold)
+            # Convert cosine similarity threshold to squared L2 distance threshold
+            # For normalized vectors: d² = 2(1 - cosine_sim)
+            threshold_squared = 2.0 * (1.0 - dedup_threshold)
+            duplicate_groups = self.index.find_duplicates(threshold=threshold_squared)
 
             # Map local row indices to original indices for auditing
             original_index_series = df["_original_index"]
