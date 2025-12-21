@@ -26,7 +26,7 @@ COPY --chown=entropyguard:entropyguard src ./src
 COPY --chown=entropyguard:entropyguard scripts ./scripts
 
 # 5. Upgrade pip and install build tools (as root)
-RUN pip install --upgrade pip setuptools wheel build poetry-core
+RUN pip install --upgrade pip setuptools wheel build
 
 # 6. Install dependencies (Root installs to global site-packages, readable by all)
 RUN pip install --no-cache-dir \
@@ -42,18 +42,33 @@ RUN pip install --no-cache-dir \
     tqdm>=4.66.0 || \
     (echo "=== DEPENDENCY INSTALL FAILED ===" && exit 1)
 
-# 7. Install the package itself with verbose output
-RUN pip install --no-cache-dir --verbose . 2>&1 | tee /tmp/install.log || \
+# 7. Install poetry-core for build backend
+RUN pip install --no-cache-dir poetry-core
+
+# 8. Install the package itself (editable mode for development, or regular install)
+# Try regular install first, if it fails, try editable mode
+RUN pip install --no-cache-dir . || \
+    (echo "=== Regular install failed, trying editable mode ===" && \
+     pip install --no-cache-dir -e .) || \
     (echo "=== PIP INSTALL FAILED ===" && \
-     echo "=== Install log ===" && \
-     cat /tmp/install.log && \
      echo "=== pyproject.toml ===" && \
      cat /app/pyproject.toml && \
      echo "=== Directory structure ===" && \
      find /app -type f -name "*.py" | head -20 && \
+     echo "=== Testing import ===" && \
+     python -c "import sys; sys.path.insert(0, '/app/src'); import entropyguard" && \
      exit 1)
 
-# 8. Verify entrypoint exists and set permissions
+# 9. Verify package is installed and importable
+RUN python -c "import entropyguard; print(f'✅ EntropyGuard {entropyguard.__version__} installed successfully')" || \
+    (echo "=== PACKAGE NOT IMPORTABLE ===" && \
+     echo "=== Python path ===" && \
+     python -c "import sys; print('\n'.join(sys.path))" && \
+     echo "=== Installed packages ===" && \
+     pip list | grep -i entropy || echo "entropyguard not found" && \
+     exit 1)
+
+# 10. Verify entrypoint exists and set permissions
 RUN test -f /app/scripts/ci_entrypoint.py && \
     chmod +x /app/scripts/ci_entrypoint.py && \
     echo "Entrypoint verified" || \
@@ -61,8 +76,8 @@ RUN test -f /app/scripts/ci_entrypoint.py && \
      ls -la /app/scripts/ && \
      exit 1)
 
-# 9. Switch to non-root user
+# 11. Switch to non-root user
 USER entropyguard
 
-# 10. Entrypoint (use absolute path)
+# 12. Entrypoint (use absolute path)
 ENTRYPOINT ["python", "/app/scripts/ci_entrypoint.py"]
