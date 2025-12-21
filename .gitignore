@@ -1,7 +1,218 @@
-# Proprietary Source Code (DO NOT COMMIT - CRITICAL SECURITY)
-control-plane/
+# ============================================
+# ENTRPYGUARD - ENHANCED SECURITY .gitignore
+# ============================================
+# CRITICAL: This file protects IP and prevents data leaks
+# This is your first line of defense against accidental commits
+# of proprietary/commercial code to the public repository.
 
-# Python
+# ============================================
+# ENTERPRISE PROTECTION LAYER
+# ============================================
+# THIS SECTION IS CRITICAL: Blocks ALL Enterprise/Commercial code
+# from being committed to the public Open Source repository.
+#
+# If you see any of these patterns in your repository, STOP and verify
+# that you are not accidentally committing Enterprise code.
+
+# Enterprise Directory Patterns
+# These directories contain proprietary code and MUST remain private
+control-plane/
+!control-plane/.gitkeep
+ee/
+enterprise/
+enterprise-edition/
+proprietary/
+commercial/
+entropyguard-control/
+entropyguard-ee/
+
+# Enterprise License Keys & Certificates
+# Never commit license files or enterprise keys
+*.license
+license.key
+license.txt
+license.dat
+enterprise.key
+commercial.key
+*.jks
+*.keystore
+*.truststore
+*.p12
+enterprise-license.*
+commercial-license.*
+
+# Enterprise Deployment Configurations
+# Production deployment configs may contain sensitive information
+docker-compose.enterprise.yml
+docker-compose.production.yml
+k8s/
+kubernetes/
+helm-charts/
+deployment/
+terraform/enterprise/
+*.enterprise.yml
+*.enterprise.yaml
+
+# Enterprise Internal Documentation
+# Documentation marked as internal or enterprise-only
+*_ENTERPRISE.md
+*_ENTERPRISE_*.md
+*_INTERNAL.md
+*_INTERNAL_*.md
+INTERNAL*.md
+ENTERPRISE*.md
+COMMERCIAL*.md
+PRICING*.md
+SALES*.md
+*_confidential*.md
+
+# Audit Reports & Security Audits
+# Internal audit reports and security assessments
+audit_report/
+audit_reports/
+security_audit/
+*_audit_report.pdf
+*_audit_report.docx
+*_audit_report.xlsx
+security-audit.*
+security_audit.*
+*_security_audit.*
+internal_audit.*
+compliance_audit.*
+
+# Internal Roadmaps & Planning Documents
+# Roadmap documents that should remain internal
+roadmap/
+roadmaps/
+ROADMAP_INTERNAL.md
+ROADMAP_INTERNAL_*.md
+*_ROADMAP_INTERNAL.md
+roadmap_internal.*
+roadmap_confidential.*
+*_internal_roadmap.*
+planning_internal.*
+
+# Enterprise Build Artifacts & Distributions
+*.enterprise
+*.ee
+*.commercial
+dist-enterprise/
+build-enterprise/
+release-enterprise/
+*.enterprise.wheel
+*.ee.wheel
+
+# ============================================
+# ENVIRONMENT & SECRETS (CRITICAL)
+# ============================================
+# NEVER commit secrets, keys, or credentials
+.env
+.env.*
+!.env.example
+*.env
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cer
+secrets/
+.secrets/
+*.secret
+config.local.*
+credentials.json
+service-account*.json
+*.jks
+*.keystore
+*.truststore
+license.key
+license.txt
+license.dat
+*.license
+enterprise.key
+commercial.key
+
+# ============================================
+# DATABASE & VOLUMES
+# ============================================
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+postgres_data/
+mysql_data/
+*.dump
+*.sql.gz
+docker-volumes/
+volumes/
+
+# ============================================
+# DOCKER & CONTAINERS
+# ============================================
+docker-compose.override.yml
+.docker/
+*.log
+
+# ============================================
+# API KEYS & TOKENS
+# ============================================
+*.token
+*.api_key
+api_keys.txt
+tokens.txt
+.stripe/
+.stripe_keys
+
+# ============================================
+# CERTIFICATES & SSL
+# ============================================
+*.crt
+*.key
+*.pem
+*.p12
+*.pfx
+*.cer
+ssl/
+certs/
+certificates/
+*.csr
+
+# ============================================
+# LOGS & SENSITIVE DATA
+# ============================================
+*.log
+logs/
+*.log.*
+*.out
+*.err
+audit.json
+audit_*.json
+*.audit
+
+# ============================================
+# DATA FILES (May contain PII)
+# ============================================
+*.csv
+*.parquet
+*.json
+*.jsonl
+*.xlsx
+*.xls
+data/
+datasets/
+raw_data/
+processed_data/
+banking_*.jsonl
+banking_*.json
+demo_*.jsonl
+demo_*.json
+stress_*.jsonl
+final_test.jsonl
+
+# ============================================
+# PYTHON
+# ============================================
 __pycache__/
 *.py[cod]
 *$py.class
@@ -22,65 +233,181 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
-# Virtual Environments
+# ============================================
+# VIRTUAL ENVIRONMENTS
+# ============================================
 venv/
 env/
 ENV/
 .venv
+env.bak/
+venv.bak/
+.conda/
 
-# Poetry
+# ============================================
+# POETRY
+# ============================================
 poetry.lock
+.poetry/
 
-# IDE
+# ============================================
+# IDE & EDITORS
+# ============================================
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+*.code-workspace
 
-# Testing
+# ============================================
+# TESTING
+# ============================================
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
 .tox/
+.nox/
+.hypothesis/
+.pytest_cache/
+test-results/
+coverage.xml
+*.cover
+.hypothesis/
 
-# Documentation
+# ============================================
+# DOCUMENTATION
+# ============================================
 site/
+docs/_build/
+docs/.doctrees/
 
-# Environment variables
-.env
-.env.local
-
-# Data files (sensitive)
-*.csv
-*.parquet
-*.json
-data/
-datasets/
-
-# Data Artifacts
-*.jsonl
-audit.json
-stress_*.jsonl
-demo_*.jsonl
-*.xlsx
-
-# Real World Test Data
-banking_*.jsonl
-banking_*.json
-
-# Logs
-*.log
-logs/
-
-# OS
+# ============================================
+# OS FILES
+# ============================================
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
 
-# Audit Reports (Internal Documentation)
-AUDIT_REPORT*.md
-AUDIT_REPORT_FINAL.md
-STRATEGIC_AUDIT*.md
-UNICORN_STRATEGY.md
-ROADMAP_TO_UNICORN.md
+# ============================================
+# TEMPORARY FILES
+# ============================================
+*.tmp
+*.temp
+*.bak
+*.backup
+*.swp
+*.swo
+*~
+.cache/
+tmp/
+temp/
+
+# ============================================
+# NODE.JS (for dashboard)
+# ============================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.eslintcache
+.node_repl_history
+*.tgz
+.yarn-integrity
+.pnp/
+.pnp.js
+
+# ============================================
+# BUILD ARTIFACTS
+# ============================================
+dist/
+build/
+*.egg-info/
+target/
+out/
+.next/
+.nuxt/
+.cache/
+
+# ============================================
+# JUPYTER NOTEBOOKS (May contain sensitive data)
+# ============================================
+.ipynb_checkpoints/
+*.ipynb
+!docs/*.ipynb
+
+# ============================================
+# BACKUP FILES
+# ============================================
+*.bak
+*.backup
+*.old
+*.orig
+
+# ============================================
+# MONITORING & ANALYTICS (May contain sensitive metrics)
+# ============================================
+*.metrics
+*.stats
+monitoring/
+analytics/
+
+# ============================================
+# CUSTOM SCRIPTS (May contain secrets)
+# ============================================
+send_data.py
+send_test_data.py
+traffic_generator.py
+!scripts/*.py
+
+# ============================================
+# ENTERPRISE-SPECIFIC ASSETS (Additional Protection)
+# ============================================
+# Enterprise deployment configurations
+docker-compose.enterprise.yml
+docker-compose.production.yml
+k8s/
+kubernetes/
+helm-charts/
+deployment/
+
+# Enterprise documentation (internal only)
+ENTERPRISE*.md
+ENTERPRISE_*.md
+COMMERCIAL*.md
+INTERNAL*.md
+PRICING*.md
+SALES*.md
+
+# Enterprise test data
+*_enterprise_*
+*_commercial_*
+*_production_*
+*_staging_*
+
+# Enterprise build artifacts
+*.enterprise
+*.ee
+*.commercial
+dist-enterprise/
+build-enterprise/
+
+# Enterprise monitoring & analytics data
+enterprise_metrics/
+commercial_analytics/
+production_logs/
