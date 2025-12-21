@@ -25,10 +25,18 @@ COPY --chown=entropyguard:entropyguard pyproject.toml README.md ./
 COPY --chown=entropyguard:entropyguard src ./src
 COPY --chown=entropyguard:entropyguard scripts ./scripts
 
-# 5. Upgrade pip first (as root)
-RUN pip install --upgrade pip setuptools wheel
+# 5. Debug: Verify files are copied
+RUN echo "=== Verifying files ===" && \
+    ls -la /app && \
+    echo "=== pyproject.toml content ===" && \
+    cat /app/pyproject.toml && \
+    echo "=== src directory ===" && \
+    ls -la /app/src
 
-# 6. Install dependencies (Root installs to global site-packages, readable by all)
+# 6. Upgrade pip first (as root)
+RUN pip install --upgrade pip setuptools wheel build
+
+# 7. Install dependencies (Root installs to global site-packages, readable by all)
 # Install in two steps: first dependencies, then the package itself
 RUN pip install --no-cache-dir \
     polars>=0.20.0 \
@@ -40,12 +48,21 @@ RUN pip install --no-cache-dir \
     pydantic>=2.5.0 \
     typing-extensions>=4.8.0 \
     sentence-transformers>=2.0.0 \
-    tqdm>=4.66.0
+    tqdm>=4.66.0 || \
+    (echo "=== DEPENDENCY INSTALL FAILED ===" && exit 1)
 
-# 7. Install the package itself
-RUN pip install --no-cache-dir .
+# 8. Install the package itself with verbose output
+RUN pip install --no-cache-dir --verbose . 2>&1 | tee /tmp/install.log || \
+    (echo "=== PIP INSTALL FAILED ===" && \
+     echo "=== Install log ===" && \
+     cat /tmp/install.log && \
+     echo "=== pyproject.toml ===" && \
+     cat /app/pyproject.toml && \
+     echo "=== Directory structure ===" && \
+     find /app -type f -name "*.py" | head -20 && \
+     exit 1)
 
-# 8. Verify entrypoint exists and set permissions
+# 9. Verify entrypoint exists and set permissions
 RUN test -f /app/scripts/ci_entrypoint.py && \
     chmod +x /app/scripts/ci_entrypoint.py && \
     echo "Entrypoint verified" || \
@@ -53,8 +70,8 @@ RUN test -f /app/scripts/ci_entrypoint.py && \
      ls -la /app/scripts/ && \
      exit 1)
 
-# 9. Switch to non-root user
+# 10. Switch to non-root user
 USER entropyguard
 
-# 10. Entrypoint (use absolute path)
+# 11. Entrypoint (use absolute path)
 ENTRYPOINT ["python", "/app/scripts/ci_entrypoint.py"]
