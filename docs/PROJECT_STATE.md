@@ -6,7 +6,7 @@
 ---
 
 ## [Current Phase]
-**Hardening & Critical Bugfixes (v1.6.0)** - Addressing critical security and mathematical issues identified in technical audit. Focus on production-readiness and code quality improvements.
+**Sprint 1: Ecosystem Expansion (Dagster/Prefect)** - Adding native support for modern data orchestration platforms. Expanding from Airflow-only to full Modern Data Stack coverage.
 
 ---
 
