@@ -37,6 +37,7 @@
 
 ## [Completed Modules]
 - ✅ Real World Validation (Banking77) - 50% reduction confirmed, semantic duplicates identified
+- ✅ **Airflow Operator** - Native Apache Airflow integration (v1.10.0)
 
 ### Core Modules ✅
 - ✅ **Ingestion Module** - Data ingestion pipeline (passed all tests)
@@ -82,7 +83,14 @@
 ---
 
 ## [Active Task]
-**CLI Module Complete** - All integration tests passing (5/5), 87% code coverage. MVP complete!
+**Sprint 1: Ecosystem Expansion** - Adding Dagster Op and Prefect Task plugins to support the entire Modern Data Stack.
+
+**In Progress:**
+- 🔄 **Dagster Op** - Native Dagster integration (in development)
+- 🔄 **Prefect Task** - Native Prefect integration (in development)
+
+**Completed:**
+- ✅ **Airflow Operator** - Apache Airflow integration (v1.10.0)
 
 ---
 
