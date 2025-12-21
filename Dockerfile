@@ -3,7 +3,8 @@ FROM python:3.10-slim
 # Set env vars
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    HF_HOME=/app/.cache/huggingface
+    HF_HOME=/app/.cache/huggingface \
+    PYTHONPATH=/app/src
 
 WORKDIR /app
 
@@ -26,7 +27,7 @@ COPY --chown=entropyguard:entropyguard src ./src
 COPY --chown=entropyguard:entropyguard scripts ./scripts
 
 # 5. Upgrade pip and install build tools (as root)
-RUN pip install --upgrade pip setuptools wheel build
+RUN pip install --upgrade pip setuptools wheel
 
 # 6. Install dependencies (Root installs to global site-packages, readable by all)
 RUN pip install --no-cache-dir \
@@ -42,33 +43,18 @@ RUN pip install --no-cache-dir \
     tqdm>=4.66.0 || \
     (echo "=== DEPENDENCY INSTALL FAILED ===" && exit 1)
 
-# 7. Install poetry-core for build backend
-RUN pip install --no-cache-dir poetry-core
-
-# 8. Install the package itself (editable mode for development, or regular install)
-# Try regular install first, if it fails, try editable mode
-RUN pip install --no-cache-dir . || \
-    (echo "=== Regular install failed, trying editable mode ===" && \
-     pip install --no-cache-dir -e .) || \
-    (echo "=== PIP INSTALL FAILED ===" && \
-     echo "=== pyproject.toml ===" && \
-     cat /app/pyproject.toml && \
-     echo "=== Directory structure ===" && \
-     find /app -type f -name "*.py" | head -20 && \
-     echo "=== Testing import ===" && \
-     python -c "import sys; sys.path.insert(0, '/app/src'); import entropyguard" && \
-     exit 1)
-
-# 9. Verify package is installed and importable
-RUN python -c "import entropyguard; print(f'✅ EntropyGuard {entropyguard.__version__} installed successfully')" || \
+# 7. Verify package is importable via PYTHONPATH (no installation needed)
+RUN python -c "import entropyguard; print(f'✅ EntropyGuard {entropyguard.__version__} importable via PYTHONPATH')" || \
     (echo "=== PACKAGE NOT IMPORTABLE ===" && \
      echo "=== Python path ===" && \
      python -c "import sys; print('\n'.join(sys.path))" && \
-     echo "=== Installed packages ===" && \
-     pip list | grep -i entropy || echo "entropyguard not found" && \
+     echo "=== src directory ===" && \
+     ls -la /app/src && \
+     echo "=== entropyguard directory ===" && \
+     ls -la /app/src/entropyguard && \
      exit 1)
 
-# 10. Verify entrypoint exists and set permissions
+# 8. Verify entrypoint exists and set permissions
 RUN test -f /app/scripts/ci_entrypoint.py && \
     chmod +x /app/scripts/ci_entrypoint.py && \
     echo "Entrypoint verified" || \
@@ -76,8 +62,8 @@ RUN test -f /app/scripts/ci_entrypoint.py && \
      ls -la /app/scripts/ && \
      exit 1)
 
-# 11. Switch to non-root user
+# 9. Switch to non-root user
 USER entropyguard
 
-# 12. Entrypoint (use absolute path)
+# 10. Entrypoint (use absolute path)
 ENTRYPOINT ["python", "/app/scripts/ci_entrypoint.py"]
