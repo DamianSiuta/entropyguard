@@ -80,13 +80,10 @@ class Embedder:
             return np.empty((0, 384), dtype=np.float32)
 
         # Get embeddings from the model
-        # normalize_embeddings=True ensures vectors are L2-normalized, allowing
-        # FAISS L2 distance to work as Cosine Similarity (when vectors are normalized,
-        # L2 distance is equivalent to cosine distance)
         embeddings = self.model.encode(
             texts,
             convert_to_numpy=True,
-            normalize_embeddings=True,
+            normalize_embeddings=False,  # We'll handle normalization in FAISS if needed
             show_progress_bar=False,
         )
 

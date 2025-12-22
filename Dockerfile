@@ -1,69 +1,26 @@
 FROM python:3.10-slim
 
-# Set env vars
+# Ensure stdout/stderr are unbuffered for better logging in containers
 ENV PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    HF_HOME=/app/.cache/huggingface \
-    PYTHONPATH=/app/src
+    PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
 
-# 1. Install system dependencies (Root)
+# System dependencies for scientific Python stack (numpy, pyarrow, faiss, torch, etc.)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libgomp1 \
-    git \
-    && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/*
 
-# 2. Create user (UID 1000)
-RUN useradd -m -u 1000 entropyguard
+# Copy project metadata and source
+COPY pyproject.toml README.md ./
+COPY src ./src
 
-# 3. Create cache directory with correct permissions
-RUN mkdir -p $HF_HOME && chown -R entropyguard:entropyguard /app
+# Install the project as a package using pip (Poetry not required at runtime)
+RUN pip install --upgrade pip && \
+    pip install .
 
-# 4. Copy project files AND set ownership immediately (Atomic Copy)
-COPY --chown=entropyguard:entropyguard pyproject.toml README.md ./
-COPY --chown=entropyguard:entropyguard src ./src
-COPY --chown=entropyguard:entropyguard scripts ./scripts
+# Default entrypoint: run the EntropyGuard CLI
+ENTRYPOINT ["python", "-m", "entropyguard.cli.main"]
 
-# 5. Upgrade pip and install build tools (as root)
-RUN pip install --upgrade pip setuptools wheel
 
-# 6. Install dependencies (Root installs to global site-packages, readable by all)
-RUN pip install --no-cache-dir \
-    polars>=0.20.0 \
-    pyarrow>=15.0.0 \
-    fastexcel>=0.11.6 \
-    torch>=2.1.0 \
-    faiss-cpu>=1.7.4 \
-    numpy>=1.24.0 \
-    pydantic>=2.5.0 \
-    typing-extensions>=4.8.0 \
-    sentence-transformers>=2.0.0 \
-    tqdm>=4.66.0 || \
-    (echo "=== DEPENDENCY INSTALL FAILED ===" && exit 1)
-
-# 7. Verify package is importable via PYTHONPATH (no installation needed)
-RUN python -c "import entropyguard; print(f'✅ EntropyGuard {entropyguard.__version__} importable via PYTHONPATH')" || \
-    (echo "=== PACKAGE NOT IMPORTABLE ===" && \
-     echo "=== Python path ===" && \
-     python -c "import sys; print('\n'.join(sys.path))" && \
-     echo "=== src directory ===" && \
-     ls -la /app/src && \
-     echo "=== entropyguard directory ===" && \
-     ls -la /app/src/entropyguard && \
-     exit 1)
-
-# 8. Verify entrypoint exists and set permissions
-RUN test -f /app/scripts/ci_entrypoint.py && \
-    chmod +x /app/scripts/ci_entrypoint.py && \
-    echo "Entrypoint verified" || \
-    (echo "ERROR: ci_entrypoint.py not found!" && \
-     ls -la /app/scripts/ && \
-     exit 1)
-
-# 9. Switch to non-root user
-USER entropyguard
-
-# 10. Entrypoint (use absolute path)
-ENTRYPOINT ["python", "/app/scripts/ci_entrypoint.py"]

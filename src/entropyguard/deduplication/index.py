@@ -43,13 +43,8 @@ class VectorIndex:
         self.dimension = dimension
         self._index: faiss.IndexFlatL2 = faiss.IndexFlatL2(dimension)
         self._vector_count = 0
-        # Store vectors for duplicate detection (only needed for find_duplicates method)
-        # For batch processing, we use search() directly, so this can be disabled
-        # to save memory. However, find_duplicates() requires it for now.
+        # Store vectors for duplicate detection
         self._vectors: list[np.ndarray] = []
-        # Memory optimization: if False, don't store vectors (saves 50% RAM)
-        # Set to False when using batch processing with direct search()
-        self._store_vectors = True
 
     def size(self) -> int:
         """
@@ -87,40 +82,13 @@ class VectorIndex:
         if vectors.dtype != np.float32:
             vectors = vectors.astype(np.float32)
 
-        # Filter out zero vectors (edge case: empty text or degenerate embeddings)
-        # Zero vectors would cause false positives in duplicate detection
-        valid_indices = []
-        for i in range(vectors.shape[0]):
-            vector = vectors[i]
-            # Check if vector is non-zero (L2 norm > epsilon)
-            norm_squared = np.dot(vector, vector)
-            if norm_squared > 1e-8:  # Epsilon threshold for numerical stability
-                valid_indices.append(i)
-            else:
-                # Log warning for zero vector (but don't fail - just skip it)
-                import warnings
-                warnings.warn(
-                    f"Skipping zero vector at index {i} (likely from empty text or degenerate embedding)",
-                    UserWarning,
-                    stacklevel=2
-                )
-
-        if not valid_indices:
-            # All vectors were zero - nothing to add
-            return
-
-        # Filter to only valid (non-zero) vectors
-        valid_vectors = vectors[valid_indices]
-
         # Add to FAISS index
-        self._index.add(valid_vectors)
-        self._vector_count += valid_vectors.shape[0]
+        self._index.add(vectors)
+        self._vector_count += vectors.shape[0]
 
-        # Store vectors for duplicate detection (only if enabled)
-        # Memory optimization: skip storage when using batch processing with direct search()
-        if self._store_vectors:
-            for i in range(valid_vectors.shape[0]):
-                self._vectors.append(valid_vectors[i].copy())
+        # Store vectors for duplicate detection
+        for i in range(vectors.shape[0]):
+            self._vectors.append(vectors[i].copy())
 
     def search(
         self, query_vector: np.ndarray, k: int = 10
@@ -168,52 +136,71 @@ class VectorIndex:
 
         return distances_list, indices_list
 
-    def set_store_vectors(self, store: bool) -> None:
-        """
-        Enable or disable vector storage for memory optimization.
-
-        Args:
-            store: If True, store vectors (needed for find_duplicates).
-                  If False, don't store (saves ~50% RAM, but find_duplicates won't work).
-        """
-        self._store_vectors = store
-
     def find_duplicates(self, threshold: float = 0.3) -> list[set[int]]:
         """
         Find duplicate vectors based on distance threshold.
 
-        Uses L2 (Euclidean) distance squared. Vectors with squared distance <= threshold
-        are considered duplicates.
+        Uses L2 (Euclidean) distance. Vectors with distance <= threshold are considered duplicates.
 
         Args:
-            threshold: Maximum SQUARED distance for vectors to be considered duplicates.
-                      This should be the squared L2 distance threshold.
-                      For normalized vectors with cosine similarity 'sim':
-                        threshold = 2 * (1 - sim)
+            threshold: Maximum distance for vectors to be considered duplicates.
                       Lower values = stricter (fewer duplicates found).
-                      Typical range: 0.02-0.2 for normalized embeddings (corresponds to
-                      cosine similarity 0.99-0.90).
+                      Typical range: 0.1-0.5 for normalized embeddings.
 
         Returns:
             List of sets, where each set contains indices of duplicate vectors.
             Each vector appears in at most one set.
 
         Note:
-            FAISS IndexFlatL2.search() returns SQUARED distances, not distances.
-            For L2-normalized vectors: d² = 2(1 - cosine_similarity)
-            This method compares squared distances directly (no square root needed).
+            This uses a simple clustering approach: for each vector, find all neighbors
+            within threshold distance and group them together.
         """
         if self._vector_count == 0:
             return []
 
-        # find_duplicates requires stored vectors to query them
-        if not self._store_vectors or len(self._vectors) == 0:
-            raise ValueError(
-                "find_duplicates() requires vector storage. "
-                "Call set_store_vectors(True) before adding vectors, "
-                "or use search() directly for batch processing."
-            )
+        # Get all vectors from index (FAISS doesn't provide direct access, so we search)
+        # We'll use a more efficient approach: for each vector, find its neighbors
+        duplicate_groups: list[set[int]] = []
+        processed: set[int] = set()
 
+        # For each vector, find its neighbors within threshold
+        for i in range(self._vector_count):
+            if i in processed:
+                continue
+
+            # Get the vector by searching for itself (with a small epsilon)
+            # Actually, we need to reconstruct or use a different approach
+            # For now, we'll search with a large k and filter by threshold
+            try:
+                # Create a dummy query - we'll need to store vectors separately for this
+                # For MVP, we'll use a simpler approach: search all against all
+                # This is O(n^2) but acceptable for MVP
+                pass
+            except Exception:
+                pass
+
+        # Simpler approach: use the index's search capability
+        # We need to store vectors to query them. For MVP, let's use a workaround:
+        # We'll search each vector against all others by using the index's search
+
+        # Actually, FAISS IndexFlatL2 doesn't let us retrieve vectors easily.
+        # For MVP, we'll implement a simpler version that requires storing vectors.
+        # But that's not ideal. Let me implement a basic version that works:
+
+        # For now, return empty list - this will be improved in next iteration
+        # The proper implementation would require storing vectors separately
+        # or using a different FAISS index type that supports vector retrieval
+
+        # Basic implementation: search each vector against all others
+        # This requires us to have access to the vectors, which we don't store
+        # For MVP, we'll implement a version that the user must provide vectors for
+
+        # Actually, let's implement a working version using a stored vectors approach
+        # But that requires changing the API. For now, let's document the limitation
+        # and provide a basic implementation that works with the current API
+
+        # Since we can't retrieve vectors from FAISS IndexFlatL2 easily,
+        # we'll need to modify the class to store vectors. Let's do that:
         return self._find_duplicates_with_stored_vectors(threshold)
 
     def _find_duplicates_with_stored_vectors(
@@ -223,17 +210,12 @@ class VectorIndex:
         Internal method to find duplicates using stored vectors.
 
         Uses a union-find approach to group vectors within threshold distance.
-
-        Args:
-            threshold: Maximum SQUARED L2 distance (already squared, no conversion needed).
-                      FAISS returns squared distances, so we compare directly.
         """
         if len(self._vectors) == 0:
             return []
 
-        # Threshold is already squared (passed from find_duplicates)
-        # FAISS IndexFlatL2.search() returns squared distances, so we compare directly
-        threshold_squared = threshold
+        # Convert threshold to squared distance (L2 distance squared)
+        threshold_squared = threshold * threshold
 
         # Union-Find data structure for grouping
         parent = list(range(len(self._vectors)))

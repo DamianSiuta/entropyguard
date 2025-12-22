@@ -71,8 +71,8 @@ class Chunker:
         if not text:
             return []
 
-        # Step 1: Recursive splitting (start with depth=0)
-        segments = self._split_recursively(text, self.separators, depth=0)
+        # Step 1: Recursive splitting
+        segments = self._split_recursively(text, self.separators)
 
         # Step 2: Merge segments with overlap
         chunks = self._merge_segments_with_overlap(segments)
@@ -129,7 +129,7 @@ class Chunker:
     # ---- Internal helpers ----------------------------------------------
 
     def _split_recursively(
-        self, text: str, separators: Sequence[str], depth: int = 0
+        self, text: str, separators: Sequence[str]
     ) -> list[str]:
         """
         Recursively split text by separators, trying each level in order.
@@ -141,20 +141,10 @@ class Chunker:
         Args:
             text: Text to split
             separators: List of separators to try (in order, largest to smallest)
-            depth: Current recursion depth (used to prevent stack overflow)
 
         Returns:
             List of text segments, each <= chunk_size (or as small as possible)
-
-        Raises:
-            RecursionError: If recursion depth exceeds maximum (100)
         """
-        # Safety: Prevent infinite recursion or stack overflow
-        MAX_RECURSION_DEPTH = 100
-        if depth > MAX_RECURSION_DEPTH:
-            # Fallback to hard split if recursion limit exceeded
-            return self._hard_split(text)
-
         # Base case: text is small enough
         if self.length_function(text) <= self.chunk_size:
             return [text.strip()] if text.strip() else []
@@ -182,11 +172,11 @@ class Chunker:
                 if self.length_function(part) <= self.chunk_size:
                     segments.append(part)
                 else:
-                    # Recursively try remaining separators (increment depth)
+                    # Recursively try remaining separators
                     remaining_seps = separators[i + 1 :]
                     if remaining_seps:
                         segments.extend(
-                            self._split_recursively(part, remaining_seps, depth=depth + 1)
+                            self._split_recursively(part, remaining_seps)
                         )
                     else:
                         # No more separators, hard split
@@ -197,7 +187,6 @@ class Chunker:
                 return segments
 
         # Fallback: if all separators failed, hard split
-        # Note: depth is not incremented here as we're not recursing, just falling back
         return self._hard_split(text)
 
     def _hard_split(self, text: str) -> list[str]:

@@ -1,17 +1,17 @@
 """
-Command-line interface for EntropyGuard.
+Command-line interface for EntropyGuard v1.11.
 
-Provides CLI tools for data sanitization workflows.
+Provides CLI tools for data sanitization workflows with Unix pipes support,
+hybrid deduplication, and marketing-grade reporting.
 """
 
 import argparse
-import json
+import io
+import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any
-from urllib import request
-from urllib.error import HTTPError, URLError
+from typing import Optional
 
 import polars as pl
 
@@ -23,98 +23,136 @@ if sys.platform == "win32":
     if hasattr(sys.stderr, 'reconfigure'):
         sys.stderr.reconfigure(encoding='utf-8')
 
-from entropyguard import __version__
 from entropyguard.cli.pipeline import Pipeline
 
 
-def _send_audit_to_server(server_url: str, audit_events: list[dict[str, Any]]) -> None:
+def setup_logging_for_pipes(output_to_stdout: bool) -> None:
     """
-    Send audit events to EntropyGuard Control Plane server.
+    Configure logging to redirect to stderr when outputting to stdout.
+    
+    This ensures stdout remains clean for piped data while logs go to stderr.
     
     Args:
-        server_url: URL of the Control Plane API endpoint
-        audit_events: List of audit event dictionaries
+        output_to_stdout: If True, all logs will be redirected to stderr.
     """
-    if not audit_events:
-        return  # Nothing to send
+    if output_to_stdout:
+        # Redirect all logging to stderr
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(message)s',
+            stream=sys.stderr,
+            force=True
+        )
+        # Also redirect any print statements that might be used for progress
+        # Note: This doesn't catch all prints, but helps with common cases
+        # Individual modules should use logging instead of print when output_to_stdout is True
+
+
+def read_stdin_as_tempfile() -> str:
+    """
+    Read data from stdin and save to a temporary file for Polars.
     
-    # Prepare payload
-    payload = {
-        "user_id": None,  # TODO: Get from environment or config
-        "pipeline_id": None,  # TODO: Generate unique pipeline ID
-        "audit_events": audit_events,
-        "metadata": {
-            "entropyguard_version": __version__,
-        },
-    }
+    Polars LazyFrame requires a file path (cannot read from BytesIO directly),
+    so we read all stdin content and save it to a temporary file.
     
-    # Convert to JSON
-    json_data = json.dumps(payload).encode("utf-8")
-    
-    # Create HTTP request
-    req = request.Request(
-        server_url,
-        data=json_data,
-        headers={
-            "Content-Type": "application/json",
-            "User-Agent": "EntropyGuard-CLI/1.0",
-        },
-        method="POST",
-    )
+    Returns:
+        Path to temporary file containing the stdin content
+        
+    Raises:
+        ValueError: If stdin is empty or cannot be read
+    """
+    import tempfile
     
     try:
-        # Send request
-        with request.urlopen(req, timeout=10) as response:
-            if response.status == 200:
-                # Success message is handled by caller
-                pass
-            else:
-                raise Exception(f"Server returned status {response.status}")
-    except HTTPError as e:
-        raise Exception(f"HTTP error {e.code}: {e.reason}")
-    except URLError as e:
-        raise Exception(f"Connection error: {e.reason}")
+        # Read all stdin content
+        stdin_content = sys.stdin.buffer.read()
+        
+        if not stdin_content:
+            raise ValueError("No data received from stdin")
+        
+        # Create temporary file and write stdin content
+        with tempfile.NamedTemporaryFile(mode='wb', suffix='.jsonl', delete=False) as tmp_file:
+            tmp_file.write(stdin_content)
+            return tmp_file.name
     except Exception as e:
-        raise Exception(f"Unexpected error: {str(e)}")
+        raise ValueError(f"Failed to read from stdin: {str(e)}") from e
+
+
+def write_to_stdout(data: pl.DataFrame) -> None:
+    """
+    Write DataFrame to stdout as JSONL (NDJSON) format.
+    
+    Ensures no other output pollutes stdout - only valid JSONL is written.
+    This function writes directly to stdout.buffer to avoid encoding issues.
+    
+    Args:
+        data: Polars DataFrame to write
+    """
+    import json
+    
+    # Remove internal tracking columns before output
+    output_cols = [col for col in data.columns if not col.startswith('_')]
+    df_output = data.select(output_cols)
+    
+    # Write each row as a JSON line to stdout
+    for row in df_output.iter_rows(named=True):
+        json_line = json.dumps(row, ensure_ascii=False)
+        sys.stdout.buffer.write(json_line.encode('utf-8'))
+        sys.stdout.buffer.write(b'\n')
+    
+    sys.stdout.buffer.flush()
 
 
 def main() -> int:
     """
-    Main entry point for EntropyGuard CLI.
-
+    Main entry point for EntropyGuard CLI v1.11.
+    
+    Supports:
+    - Unix pipes: `cat data.jsonl | entropyguard --input - --output -`
+    - File I/O: `entropyguard --input data.jsonl --output cleaned.jsonl`
+    - Hybrid deduplication (exact + semantic)
+    - Cost savings reporting
+    
     Returns:
         Exit code (0 for success, 1 for failure)
     """
     parser = argparse.ArgumentParser(
-        description="EntropyGuard - AI Data Sanitation Infrastructure",
+        description="EntropyGuard v1.11 - AI Data Sanitation Infrastructure",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Basic usage
+  # Basic usage with files
   entropyguard --input data.ndjson --output cleaned.ndjson --text-column text
+
+  # Unix pipes (stdin/stdout)
+  cat data.jsonl | entropyguard --input - --output - --text-column text
 
   # With custom settings
   entropyguard --input data.ndjson --output cleaned.ndjson --text-column text \\
     --min-length 100 --dedup-threshold 0.9
 
-  # With schema validation
+  # With audit logging
   entropyguard --input data.ndjson --output cleaned.ndjson --text-column text \\
-    --required-columns text,id,date
+    --audit-log audit.json
         """,
     )
 
     parser.add_argument(
         "--input",
-        required=True,
+        required=False,  # Changed: now optional, defaults to stdin if not provided
         type=str,
-        help="Path to input data file (CSV, JSON, or NDJSON format)",
+        default="-",
+        help="Path to input data file (CSV, JSON, or NDJSON format). "
+             "Use '-' or omit to read from stdin (default: '-')",
     )
 
     parser.add_argument(
         "--output",
-        required=True,
+        required=False,  # Changed: now optional, defaults to stdout if not provided
         type=str,
-        help="Path to output data file (NDJSON format)",
+        default="-",
+        help="Path to output data file (NDJSON format). "
+             "Use '-' or omit to write to stdout (default: '-')",
     )
 
     parser.add_argument(
@@ -145,8 +183,9 @@ Examples:
         "--dedup-threshold",
         type=float,
         default=0.95,
-        help="Similarity threshold for deduplication (0.0-1.0, default: 0.95). "
-        "Higher values = stricter (fewer duplicates found).",
+        help="Similarity threshold for semantic deduplication (0.0-1.0, default: 0.95). "
+        "Higher values = stricter (fewer duplicates found). "
+        "Note: Exact duplicates are removed first via fast hashing.",
     )
 
     parser.add_argument(
@@ -161,34 +200,12 @@ Examples:
     )
 
     parser.add_argument(
-        "--batch-size",
-        type=int,
-        default=10000,
-        help=(
-            "Number of rows to process in each batch (default: 10000). "
-            "Larger batches use more RAM but process faster. "
-            "Smaller batches (e.g., 1000) use less RAM for large datasets."
-        ),
-    )
-
-    parser.add_argument(
         "--audit-log",
         type=str,
         default=None,
         help=(
             "Optional path to a JSON file where an audit log of dropped/duplicate rows "
             "will be written. Helps with compliance and data lineage."
-        ),
-    )
-
-    parser.add_argument(
-        "--server-url",
-        type=str,
-        default=None,
-        help=(
-            "Optional URL of EntropyGuard Control Plane server. "
-            "If provided, audit logs will be sent to this server via HTTP POST. "
-            "Example: --server-url https://api.entropyguard.com/api/v1/telemetry/audit"
         ),
     )
 
@@ -227,13 +244,40 @@ Examples:
 
     args = parser.parse_args()
 
-    # Validate input file exists
-    if not Path(args.input).exists():
-        print(f"Error: Input file not found: {args.input}", file=sys.stderr)
-        return 1
+    # Determine if we're using stdin/stdout
+    input_is_stdin = args.input == "-" or args.input is None
+    output_is_stdout = args.output == "-" or args.output is None
+
+    # Setup logging redirection BEFORE any other operations
+    setup_logging_for_pipes(output_is_stdout)
+
+    # Handle stdin input
+    input_path: str
+    if input_is_stdin:
+        # Check if stdin is a TTY (interactive terminal)
+        if sys.stdin.isatty():
+            print(
+                "Error: No input provided and stdin is a TTY. "
+                "Provide --input file path or pipe data to stdin.",
+                file=sys.stderr
+            )
+            return 1
+        
+        # Read from stdin and create a temporary file
+        try:
+            input_path = read_stdin_as_tempfile()
+        except Exception as e:
+            print(f"Error: Failed to read from stdin: {e}", file=sys.stderr)
+            return 1
+    else:
+        # Validate input file exists
+        if not Path(args.input).exists():
+            print(f"Error: Input file not found: {args.input}", file=sys.stderr)
+            return 1
+        input_path = args.input
 
     # Parse required columns if provided
-    required_columns = None
+    required_columns: Optional[list[str]] = None
     if args.required_columns:
         required_columns = [col.strip() for col in args.required_columns.split(",")]
 
@@ -254,7 +298,7 @@ Examples:
         return 1
 
     # Validate chunking parameters
-    chunk_separators = None
+    chunk_separators: Optional[list[str]] = None
     if args.chunk_size is not None:
         if args.chunk_size <= 0:
             print(
@@ -284,12 +328,12 @@ Examples:
             ]
 
     # Auto-discover text column if not provided
-    text_column = args.text_column
-    if text_column is None:
+    text_column: str
+    if args.text_column is None:
         from entropyguard.ingestion import load_dataset
 
         try:
-            lf = load_dataset(args.input)
+            lf = load_dataset(input_path)
             # Inspect a small materialized sample to infer schema / string columns
             df_head = lf.head(100).collect()
             string_cols = [
@@ -317,23 +361,32 @@ Examples:
                     best_col = col
 
             text_column = best_col
-            print(f"⚠️  Auto-detected text column: '{text_column}'")
+            if not output_is_stdout:  # Only print to stderr if not using stdout
+                print(f"⚠️  Auto-detected text column: '{text_column}'", file=sys.stderr)
         except Exception as e:
             print(
                 f"Error: Failed to auto-detect text column: {e}",
                 file=sys.stderr,
             )
             return 1
+    else:
+        text_column = args.text_column
 
-    # Run pipeline
-    print("🚀 Starting EntropyGuard pipeline...")
-    print(f"   Input:  {args.input}")
-    print(f"   Output: {args.output}")
-    print(f"   Text column: {text_column}")
-    print(f"   Min length: {args.min_length}")
-    print(f"   Dedup threshold: {args.dedup_threshold}")
-    print(f"   Model name: {args.model_name}")
-    print(f"   Batch size: {args.batch_size}")
+    # Print configuration (always to stderr)
+    if not output_is_stdout:
+        print("🚀 Starting EntropyGuard pipeline...", file=sys.stderr)
+        print(f"   Input:  {args.input if not input_is_stdin else 'stdin'}", file=sys.stderr)
+        print(f"   Output: {args.output if not output_is_stdout else 'stdout'}", file=sys.stderr)
+    else:
+        # Minimal logging when outputting to stdout
+        logging.info("🚀 Starting EntropyGuard pipeline...")
+        logging.info(f"   Input:  {'stdin' if input_is_stdin else args.input}")
+        logging.info(f"   Output: stdout")
+    
+    print(f"   Text column: {text_column}", file=sys.stderr)
+    print(f"   Min length: {args.min_length}", file=sys.stderr)
+    print(f"   Dedup threshold: {args.dedup_threshold}", file=sys.stderr)
+    print(f"   Model name: {args.model_name}", file=sys.stderr)
     if args.chunk_size:
         sep_info = (
             f" (separators: {', '.join(repr(s) for s in chunk_separators)})"
@@ -341,40 +394,31 @@ Examples:
             else ""
         )
         print(
-            f"   Chunk size: {args.chunk_size} (overlap: {args.chunk_overlap}){sep_info}"
+            f"   Chunk size: {args.chunk_size} (overlap: {args.chunk_overlap}){sep_info}",
+            file=sys.stderr
         )
     if args.audit_log:
-        print(f"   Audit log: {args.audit_log}")
+        print(f"   Audit log: {args.audit_log}", file=sys.stderr)
     if required_columns:
-        print(f"   Required columns: {', '.join(required_columns)}")
-    print()
+        print(f"   Required columns: {', '.join(required_columns)}", file=sys.stderr)
+    if not output_is_stdout:
+        print(file=sys.stderr)
 
-    # Validate model name at startup (fail fast - v1.7.1)
-    print("🔍 Validating model...", end=" ", flush=True)
-    try:
-        from sentence_transformers import SentenceTransformer
+    # Determine output path
+    output_path: str
+    if output_is_stdout:
+        # Use a temporary file for pipeline processing, then write to stdout
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as tmp_file:
+            output_path = tmp_file.name
+    else:
+        output_path = args.output
 
-        # Try to load model (this will fail fast if invalid)
-        test_model = SentenceTransformer(args.model_name)
-        del test_model  # Free memory immediately
-        print("✅")
-    except Exception as e:
-        print("❌")
-        print(
-            f"ERROR: Invalid model name '{args.model_name}' or connection failed.",
-            file=sys.stderr,
-        )
-        print(f"Details: {str(e)}", file=sys.stderr)
-        print(
-            "Please check the model name and ensure you have internet access (for first download).",
-            file=sys.stderr,
-        )
-        return 1
-
-    pipeline = Pipeline(model_name=args.model_name, batch_size=args.batch_size)
+    # Run pipeline
+    pipeline = Pipeline(model_name=args.model_name)
     result = pipeline.run(
-        input_path=args.input,
-        output_path=args.output,
+        input_path=input_path,
+        output_path=output_path,
         text_column=text_column,
         required_columns=required_columns,
         min_length=args.min_length,
@@ -385,38 +429,63 @@ Examples:
         chunk_separators=chunk_separators,
     )
 
+    # Cleanup temporary input file if created from stdin
+    if input_is_stdin and Path(input_path).exists():
+        try:
+            Path(input_path).unlink()
+        except Exception:
+            pass  # Ignore cleanup errors
+
     if result["success"]:
-        stats = result["stats"]
-        print("✅ Pipeline completed successfully!")
-        print()
-        print("📊 Summary Statistics:")
-        print(f"   Original rows:     {stats.get('original_rows', 'N/A')}")
-        print(f"   After sanitization: {stats.get('after_sanitization_rows', 'N/A')}")
-        if args.chunk_size:
-            print(f"   After chunking:     {stats.get('after_chunking_rows', 'N/A')}")
-        print(f"   After deduplication: {stats.get('after_deduplication_rows', 'N/A')}")
-        print(f"   Duplicates removed:  {stats.get('duplicates_removed', 'N/A')}")
-        print(f"   Final rows:       {stats.get('final_rows', 'N/A')}")
-        print(f"   Total dropped:    {stats.get('total_dropped', 'N/A')}")
-        print()
-        print(f"💾 Output saved to: {result['output_path']}")
-        
-        # Send audit events to Control Plane if server URL is provided
-        if args.server_url:
-            print()
-            print(f"📡 Sending audit report to {args.server_url}...")
+        # If output is stdout, write the result to stdout
+        if output_is_stdout:
             try:
-                _send_audit_to_server(
-                    server_url=args.server_url,
-                    audit_events=pipeline.audit_events,
-                )
-                print("✅ Report sent successfully!")
+                # Read the temporary output file and write to stdout
+                df = pl.read_ndjson(output_path)
+                write_to_stdout(df)
+                # Cleanup temp file
+                try:
+                    Path(output_path).unlink()
+                except Exception:
+                    pass
             except Exception as e:
-                print(
-                    f"⚠️  Warning: Failed to send report: {e}",
-                    file=sys.stderr,
-                )
-                # Continue execution - don't fail the pipeline
+                print(f"Error: Failed to write to stdout: {e}", file=sys.stderr)
+                return 1
+        
+        # Print summary and cost savings report (always to stderr)
+        stats = result["stats"]
+        print(file=sys.stderr)
+        print("✅ EntropyGuard Processing Complete", file=sys.stderr)
+        print("=" * 50, file=sys.stderr)
+        
+        original_rows = stats.get('original_rows', 0)
+        exact_dupes = stats.get('exact_duplicates_removed', 0)
+        semantic_dupes = stats.get('semantic_duplicates_removed', 0)
+        total_dropped = stats.get('total_dropped', 0)
+        
+        print(f"Input Records:        {original_rows:,}", file=sys.stderr)
+        print("-" * 50, file=sys.stderr)
+        
+        if exact_dupes > 0:
+            print(f"🚫 Exact Dupes:       {exact_dupes:,}  (Removed via Hash)", file=sys.stderr)
+        if semantic_dupes > 0:
+            print(f"🤖 Semantic Dupes:    {semantic_dupes:,}  (Removed via AI)", file=sys.stderr)
+        
+        if original_rows > 0:
+            reduction_pct = (total_dropped / original_rows) * 100
+            print(f"📉 Total Reduction:   {reduction_pct:.1f}%", file=sys.stderr)
+        
+        print("=" * 50, file=sys.stderr)
+        
+        # Calculate and display cost savings
+        estimated_savings = stats.get('estimated_api_savings', 0.0)
+        if estimated_savings > 0:
+            print(f"💰 Est. API Savings:  ${estimated_savings:.2f}  (vs OpenAI embedding)", file=sys.stderr)
+            print("=" * 50, file=sys.stderr)
+        
+        if not output_is_stdout:
+            print(file=sys.stderr)
+            print(f"💾 Output saved to: {result['output_path']}", file=sys.stderr)
         
         return 0
     else:

@@ -14,6 +14,12 @@ What sets EntropyGuard apart is its **complete local execution** capability. The
 
 ## 🚀 Key Features
 
+* **Hybrid Deduplication Engine:** Two-stage deduplication strategy that delivers massive performance gains. **Stage 1** uses `xxhash` for lightning-fast exact duplicate removal (hash-based), eliminating identical content before expensive AI processing. **Stage 2** applies semantic similarity detection using `sentence-transformers` and `FAISS` only on survivors, dramatically reducing computational costs and processing time. This hybrid approach provides the best of both worlds: speed and intelligence.
+
+* **Unix Pipes & Streaming:** Built for data engineering workflows. Reads from `stdin` and writes to `stdout`, making EntropyGuard a perfect fit for Unix pipelines, `n8n` workflows, Apache Airflow DAGs, and bash scripting. All logs and progress indicators are automatically redirected to `stderr`, ensuring clean, parsable JSONL output on `stdout` for downstream processing.
+
+* **ROI & Cost Report:** Automatically generates a marketing-grade cost savings report at the end of each run. Calculates estimated API cost savings (based on OpenAI embedding pricing) by tracking all dropped characters from exact duplicates, semantic duplicates, and validation filters. See exactly how much you're saving in real dollars.
+
 * **Semantic Deduplication:** Uses `sentence-transformers` and `FAISS` (Vector Search) to find and remove meanings-based duplicates, not just exact matches. This advanced approach identifies semantically similar content even when word-for-word matches don't exist.
 
 * **Universal Ingestion:** Single CLI interface for heterogeneous data sources – Excel (`.xlsx`), Parquet (`.parquet`), CSV, and JSONL/NDJSON – all normalized into a unified processing pipeline.
@@ -96,6 +102,27 @@ We provide a PowerShell script for one-click execution:
 
 ### 3. Manual Usage (CLI)
 
+#### Unix Pipe Mode (Ideal for n8n / ETL / Airflow)
+
+EntropyGuard v1.11+ supports Unix pipes for seamless integration with data engineering workflows:
+
+```bash
+# Read from stdin, write to stdout (perfect for pipelines)
+cat huge_data.jsonl | entropyguard --input - --output - --text-column text --dedup-threshold 0.85 > clean_data.jsonl
+
+# Or with auto-detected text column
+cat data.jsonl | entropyguard --input - --output - --dedup-threshold 0.85 | jq .
+
+# Integration with n8n, Airflow, or bash scripts
+curl -s https://api.example.com/data.jsonl | \
+  entropyguard --input - --output - --min-length 50 | \
+  gzip > processed_data.jsonl.gz
+```
+
+**Note:** When using `--output -`, all logs and progress indicators are automatically redirected to `stderr`, ensuring clean JSONL output on `stdout` for downstream processing.
+
+#### File-Based Usage (Traditional)
+
 Basic example (local Python + Poetry):
 
 ```bash
@@ -117,6 +144,29 @@ python -m entropyguard.cli.main \
   --separators "|" "\\n"
 ```
 
+#### Expected Output Report
+
+After processing, EntropyGuard displays a cost savings report on `stderr`:
+
+```
+✅ EntropyGuard Processing Complete
+==================================================
+Input Records:        10,000
+--------------------------------------------------
+🚫 Exact Dupes:       2,500  (Removed via Hash)
+🤖 Semantic Dupes:    500    (Removed via AI)
+📉 Total Reduction:   30.0%
+==================================================
+💰 Est. API Savings:  $1.52  (vs OpenAI embedding)
+==================================================
+```
+
+This report shows:
+- **Exact Dupes:** Fast hash-based duplicates removed (Stage 1)
+- **Semantic Dupes:** AI-detected semantic duplicates removed (Stage 2)
+- **Total Reduction:** Overall percentage of data eliminated
+- **Est. API Savings:** Calculated cost savings based on OpenAI embedding pricing
+
 ### 4. Docker Deployment (Recommended for Production)
 
 Build the image:
@@ -136,7 +186,7 @@ docker run -v $(pwd)/data:/data entropyguard --input /data/file.xlsx --output /d
 The EntropyGuard pipeline follows a structured, modular architecture that processes data through sequential stages:
 
 ```
-[Raw Data: JSONL / CSV / Excel / Parquet]
+[Raw Data: JSONL / CSV / Excel / Parquet / stdin]
         ↓
 [Universal Ingestion: Excel/Parquet/CSV/JSONL Loader]
         ↓
@@ -148,21 +198,25 @@ The EntropyGuard pipeline follows a structured, modular architecture that proces
         ↓
 [Text Chunking (Optional, if --chunk-size provided)]
         ↓
-[Vector Embedding (Sentence-Transformers, configurable --model-name)]
+[Hybrid Deduplication v1.11+]
+        ├─ Stage 1: Exact Match (xxhash hash-based, fast)
+        └─ Stage 2: Semantic Similarity (FAISS, only on survivors)
         ↓
-[FAISS Dedup]
+[Cost Savings Calculation]
         ↓
-[Clean Data (NDJSON / Parquet / downstream sinks)]
+[Clean Data (NDJSON / stdout / downstream sinks)]
 ```
 
 **Pipeline Stages:**
-1. **Ingestion:** Loads data from Excel, Parquet, CSV, and JSONL/NDJSON into a unified lazy representation.
+1. **Ingestion:** Loads data from Excel, Parquet, CSV, JSONL/NDJSON, or `stdin` into a unified lazy representation.
 2. **Validation:** Applies quality gates to filter out invalid entries before expensive processing.
 3. **Sanitization:** Removes PII, HTML tags, and noise using configurable, enterprise-safe rules.
 4. **Chunking (Optional):** Splits long texts into smaller, overlapping fragments using a recursive delimiter-aware strategy. Enabled when `--chunk-size` is provided. Critical for RAG workflows.
-5. **Vector Embedding:** Generates semantic embeddings using `sentence-transformers` with a configurable `--model-name` for monolingual or multilingual workloads.
-6. **FAISS Deduplication:** Identifies and removes semantically similar duplicates at scale using FAISS.
-7. **Clean Data:** Outputs optimized, high-quality dataset suitable for LLM training or analytics workloads.
+5. **Hybrid Deduplication (v1.11+):** Two-stage deduplication strategy:
+   - **Stage 1 (Exact Match):** Fast hash-based deduplication using `xxhash` to remove identical content before expensive AI processing.
+   - **Stage 2 (Semantic):** Vector embedding and FAISS-based semantic similarity detection, applied only to survivors from Stage 1. Uses `sentence-transformers` with a configurable `--model-name` for monolingual or multilingual workloads.
+6. **Cost Savings Calculation:** Tracks all dropped characters and calculates estimated API cost savings based on OpenAI embedding pricing.
+7. **Clean Data:** Outputs optimized, high-quality dataset to file or `stdout`, suitable for LLM training or analytics workloads.
 
 ## 📜 Audit Log & Compliance
 
@@ -208,8 +262,8 @@ All options for `python -m entropyguard.cli.main` (or the `entropyguard` entrypo
 
 | Flag                | Required | Default               | Description                                                                                   |
 |---------------------|----------|-----------------------|-----------------------------------------------------------------------------------------------|
-| `--input`           | Yes      | –                     | Path to input data file (`.xlsx`, `.parquet`, `.csv`, `.jsonl`/`.ndjson`, `.json`).          |
-| `--output`          | Yes      | –                     | Path to output data file (NDJSON/JSONL).                                                      |
+| `--input`           | No       | `-` (stdin)           | Path to input data file (`.xlsx`, `.parquet`, `.csv`, `.jsonl`/`.ndjson`, `.json`). Use `-` or omit to read from `stdin`. |
+| `--output`          | No       | `-` (stdout)          | Path to output data file (NDJSON/JSONL). Use `-` or omit to write to `stdout`. All logs redirected to `stderr` when using stdout. |
 | `--text-column`     | No       | Auto-detected         | Name of the text column to process. **Optional** – auto-detected if not provided.            |
 | `--audit-log`       | No       | `None`                | Path to JSON file with audit entries for dropped/duplicate rows (compliance & traceability). |
 | `--dedup-threshold` | No       | `0.85` (recommended)  | Similarity threshold for deduplication (0.0–1.0). Higher = stricter (fewer duplicates found). |
@@ -220,6 +274,15 @@ All options for `python -m entropyguard.cli.main` (or the `entropyguard` entrypo
 | `--model-name`      | No       | `all-MiniLM-L6-v2`    | HuggingFace / sentence-transformers model for embeddings (supports multilingual models).      |
 
 ## 🌟 Feature Highlights
+
+- **Hybrid Deduplication Engine (v1.11+):**  
+  Two-stage deduplication strategy: **Stage 1** uses `xxhash` for lightning-fast exact duplicate removal (hash-based), eliminating identical content before expensive AI processing. **Stage 2** applies semantic similarity detection using `sentence-transformers` + FAISS only on survivors. This hybrid approach delivers massive performance gains by avoiding expensive embedding computation for exact duplicates.
+
+- **Unix Pipes & Streaming (v1.11+):**  
+  Built for data engineering workflows. Reads from `stdin` (`--input -`) and writes to `stdout` (`--output -`), making EntropyGuard perfect for Unix pipelines, `n8n` workflows, Apache Airflow DAGs, and bash scripting. All logs automatically redirected to `stderr`, ensuring clean, parsable JSONL output on `stdout`.
+
+- **ROI & Cost Report (v1.11+):**  
+  Automatically generates a marketing-grade cost savings report showing estimated API cost savings (based on OpenAI embedding pricing). Tracks all dropped characters from exact duplicates, semantic duplicates, and validation filters. See exactly how much you're saving in real dollars with each run.
 
 - **Semantic Deduplication:**  
   Removes duplicates based on **meaning**, not exact string match, using sentence-transformers + FAISS.
