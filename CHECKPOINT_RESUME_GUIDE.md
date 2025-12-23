@@ -1,18 +1,18 @@
 # Checkpoint/Resume Guide
 
-## Przegląd
+## Overview
 
-EntropyGuard v1.21 wprowadza mechanizm checkpoint/resume, który pozwala na:
-- Zapis stanu pośredniego po każdym etapie przetwarzania
-- Wznowienie przetwarzania z ostatniego checkpointu po błędzie
-- Oszczędność czasu przy długotrwałych operacjach
+EntropyGuard v1.22 introduces a checkpoint/resume mechanism that enables:
+- Saving intermediate state after each processing stage
+- Resuming processing from the last checkpoint after an error
+- Time savings for long-running operations
 
-## Użycie
+## Usage
 
-### Podstawowe użycie
+### Basic Usage
 
 ```bash
-# Uruchom pipeline z checkpointami
+# Run pipeline with checkpoints
 entropyguard \
   --input data.jsonl \
   --output cleaned.jsonl \
@@ -20,10 +20,10 @@ entropyguard \
   --checkpoint-dir ./checkpoints
 ```
 
-### Resume po błędzie
+### Resume After Error
 
 ```bash
-# Jeśli pipeline się przerwie, wznowij z checkpointu
+# If the pipeline is interrupted, resume from checkpoint
 entropyguard \
   --input data.jsonl \
   --output cleaned.jsonl \
@@ -32,43 +32,56 @@ entropyguard \
   --resume
 ```
 
-## Jak to działa
+### Automatic Resume
 
-### Etapy z checkpointami
-
-Checkpointy są zapisywane po następujących etapach:
-
-1. **after_exact_dedup** - Po deduplikacji dokładnej (hash-based)
-2. **after_semantic_dedup** - Po deduplikacji semantycznej (embedding-based)
-
-### Format checkpointów
-
-- **Pliki danych**: Parquet (efektywny format dla dużych zbiorów)
-- **Metadata**: JSON z informacjami o checkpointie
-- **Lokalizacja**: `{checkpoint_dir}/{stage}.parquet`
-
-### Walidacja checkpointów
-
-Przed użyciem checkpointu, system weryfikuje:
-- ✅ Hash pliku wejściowego (czy plik się nie zmienił)
-- ✅ Hash konfiguracji (czy parametry się nie zmieniły)
-- ✅ Istnienie pliku checkpointu
-
-Jeśli walidacja się nie powiedzie, checkpoint jest ignorowany i przetwarzanie zaczyna się od początku.
-
-## Przykłady
-
-### Przykład 1: Długotrwałe przetwarzanie
+By default, EntropyGuard automatically detects and resumes from checkpoints if available. To disable automatic resume:
 
 ```bash
-# Uruchom pipeline (może trwać kilka godzin)
+entropyguard \
+  --input data.jsonl \
+  --output cleaned.jsonl \
+  --text-column text \
+  --checkpoint-dir ./checkpoints \
+  --no-auto-resume
+```
+
+## How It Works
+
+### Checkpoint Stages
+
+Checkpoints are saved after the following stages:
+
+1. **after_exact_dedup** - After exact deduplication (hash-based)
+2. **after_semantic_dedup** - After semantic deduplication (embedding-based)
+
+### Checkpoint Format
+
+- **Data files**: Parquet (efficient format for large datasets)
+- **Metadata**: JSON with checkpoint information
+- **Location**: `{checkpoint_dir}/{stage}.parquet`
+
+### Checkpoint Validation
+
+Before using a checkpoint, the system verifies:
+- ✅ Input file hash (whether the file has changed)
+- ✅ Configuration hash (whether parameters have changed)
+- ✅ Checkpoint file existence
+
+If validation fails, the checkpoint is ignored and processing starts from the beginning.
+
+## Examples
+
+### Example 1: Long-Running Processing
+
+```bash
+# Run pipeline (may take several hours)
 entropyguard \
   --input 100gb_data.jsonl \
   --output cleaned.jsonl \
   --text-column text \
   --checkpoint-dir ./checkpoints
 
-# Jeśli się przerwie (np. OOM), wznowij:
+# If interrupted (e.g., OOM), resume:
 entropyguard \
   --input 100gb_data.jsonl \
   --output cleaned.jsonl \
@@ -77,54 +90,54 @@ entropyguard \
   --resume
 ```
 
-### Przykład 2: Testowanie z checkpointami
+### Example 2: Testing with Checkpoints
 
 ```bash
-# Przetwórz mały zbiór z checkpointami
+# Process small dataset with checkpoints
 entropyguard \
   --input test_data.jsonl \
   --output test_cleaned.jsonl \
   --text-column text \
   --checkpoint-dir ./test_checkpoints
 
-# Sprawdź checkpointy
+# Check checkpoints
 ls ./test_checkpoints/
 # after_exact_dedup.parquet
 # after_semantic_dedup.parquet
 # checkpoint_metadata.json
 
-# Wyczyść checkpointy po sukcesie
+# Clean up checkpoints after success
 rm -rf ./test_checkpoints
 ```
 
-## Ograniczenia
+## Limitations
 
-1. **Zmiana pliku wejściowego**: Jeśli plik wejściowy się zmieni, checkpointy są nieważne
-2. **Zmiana konfiguracji**: Jeśli parametry się zmienią, checkpointy są nieważne
-3. **Miejsce na dysku**: Checkpointy zajmują miejsce (mniej więcej tyle samo co dane pośrednie)
+1. **Input file changes**: If the input file changes, checkpoints become invalid
+2. **Configuration changes**: If parameters change, checkpoints become invalid
+3. **Disk space**: Checkpoints take up space (roughly the same as intermediate data)
 
 ## Troubleshooting
 
 ### Problem: "Checkpoint invalid or not found"
 
-**Przyczyna**: Plik wejściowy lub konfiguracja się zmieniły
+**Cause**: Input file or configuration has changed
 
-**Rozwiązanie**: Uruchom bez `--resume` lub usuń stare checkpointy
+**Solution**: Run without `--resume` or delete old checkpoints
 
 ### Problem: "Failed to load checkpoint"
 
-**Przyczyna**: Plik checkpointu jest uszkodzony
+**Cause**: Checkpoint file is corrupted
 
-**Rozwiązanie**: Usuń uszkodzony checkpoint i uruchom ponownie
+**Solution**: Delete the corrupted checkpoint and run again
 
-### Problem: Checkpointy zajmują dużo miejsca
+### Problem: Checkpoints take up too much space
 
-**Rozwiązanie**: Usuń checkpointy po sukcesie:
+**Solution**: Delete checkpoints after success:
 ```bash
 rm -rf ./checkpoints
 ```
 
-Lub użyj `cleanup_checkpoints()` w kodzie Python.
+Or use `cleanup_checkpoints()` in Python code.
 
 ## API (Python)
 
@@ -132,10 +145,10 @@ Lub użyj `cleanup_checkpoints()` w kodzie Python.
 from entropyguard.core.checkpoint import CheckpointManager
 import polars as pl
 
-# Utwórz manager
+# Create manager
 manager = CheckpointManager(checkpoint_dir="./checkpoints")
 
-# Zapisz checkpoint
+# Save checkpoint
 df = pl.DataFrame({"text": ["test"]})
 manager.save_checkpoint(
     "after_exact_dedup",
@@ -144,27 +157,26 @@ manager.save_checkpoint(
     {"input_path": "input.jsonl", "dedup_threshold": 0.95}
 )
 
-# Wczytaj checkpoint
+# Load checkpoint
 loaded_df = manager.load_checkpoint(
     "after_exact_dedup",
     "input.jsonl",
     {"input_path": "input.jsonl", "dedup_threshold": 0.95}
 )
 
-# Wyczyść checkpointy
+# Clean up checkpoints
 manager.cleanup_checkpoints(keep_latest=False)
 ```
 
 ## Best Practices
 
-1. **Używaj checkpointów dla dużych zbiorów** (>10GB)
-2. **Wyczyść checkpointy po sukcesie** (oszczędność miejsca)
-3. **Nie zmieniaj pliku wejściowego** podczas przetwarzania
-4. **Nie zmieniaj konfiguracji** między uruchomieniami z resume
-5. **Używaj osobnych katalogów** dla różnych zadań
+1. **Use checkpoints for large datasets** (>10GB)
+2. **Clean up checkpoints after success** (save disk space)
+3. **Don't change input file** during processing
+4. **Don't change configuration** between resume runs
+5. **Use separate directories** for different tasks
 
-## Zobacz też
+## See Also
 
-- `IMPROVEMENTS_PLAN_V1.21.md` - Pełny plan ulepszeń
-- `BRUTAL_AUDIT_V1.20.md` - Audit, który zidentyfikował potrzebę checkpointów
-
+- `PROJECT_COMPREHENSIVE_DOCUMENTATION.md` - Full project documentation
+- `README.md` - Main documentation and quick start guide
