@@ -1,44 +1,44 @@
-# 🛡️ EntropyGuard - Kompleksowa Dokumentacja Projektu
+# 🛡️ EntropyGuard - Comprehensive Project Documentation
 
-## 📋 Spis Treści
+## 📋 Table of Contents
 
-1. [Wprowadzenie i Cel Projektu](#wprowadzenie-i-cel-projektu)
+1. [Introduction and Project Goals](#introduction-and-project-goals)
 2. [Problem: Model Collapse](#problem-model-collapse)
-3. [Architektura Systemu](#architektura-systemu)
-4. [Szczegółowy Pipeline](#szczegółowy-pipeline)
-5. [Komponenty i Moduły](#komponenty-i-moduły)
+3. [System Architecture](#system-architecture)
+4. [Detailed Pipeline](#detailed-pipeline)
+5. [Components and Modules](#components-and-modules)
 6. [Hybrid Deduplication Engine](#hybrid-deduplication-engine)
-7. [Memory Management i Optymalizacje](#memory-management-i-optymalizacje)
+7. [Memory Management and Optimizations](#memory-management-and-optimizations)
 8. [CLI Interface](#cli-interface)
 9. [Error Handling](#error-handling)
 10. [Configuration Management](#configuration-management)
-11. [Performance i Benchmarking](#performance-i-benchmarking)
+11. [Performance and Benchmarking](#performance-and-benchmarking)
 12. [Testing Strategy](#testing-strategy)
-13. [Deployment i Distribution](#deployment-i-distribution)
-14. [Roadmap i Wersjonowanie](#roadmap-i-wersjonowanie)
+13. [Deployment and Distribution](#deployment-and-distribution)
+14. [Roadmap and Versioning](#roadmap-and-versioning)
 
 ---
 
-## 1. Wprowadzenie i Cel Projektu
+## 1. Introduction and Project Goals
 
-### 1.1 Co to jest EntropyGuard?
+### 1.1 What is EntropyGuard?
 
-**EntropyGuard** to zaawansowany, produkcyjny system inżynierii danych zaprojektowany specjalnie do optymalizacji danych treningowych dla Large Language Models (LLM). Jest to kompleksowe narzędzie CLI, które rozwiązuje krytyczny problem degradacji jakości modeli ML spowodowany treningiem na niskiej jakości, zduplikowanych lub zanieczyszczonych danych.
+**EntropyGuard** is an advanced, production-grade data engineering system designed specifically for optimizing training data for Large Language Models (LLMs). It is a comprehensive CLI tool that solves the critical problem of ML model quality degradation caused by training on low-quality, duplicated, or contaminated data.
 
-### 1.2 Główne Cele Projektu
+### 1.2 Main Project Goals
 
-1. **Zapobieganie Model Collapse**: Eliminacja zduplikowanych i niskiej jakości danych przed treningiem modeli
-2. **Lokalne Przetwarzanie**: 100% lokalne wykonanie, bez wysyłania danych do zewnętrznych API
-3. **Wysoka Wydajność**: Optymalizacja pod kątem szybkości i efektywności pamięciowej
-4. **Enterprise-Grade**: Produkcyjna jakość kodu z pełnym testowaniem i dokumentacją
-5. **Uniwersalność**: Obsługa wielu formatów danych i integracja z istniejącymi pipeline'ami
+1. **Prevent Model Collapse**: Eliminate duplicated and low-quality data before model training
+2. **Local Processing**: 100% local execution, no data sent to external APIs
+3. **High Performance**: Optimized for speed and memory efficiency
+4. **Enterprise-Grade**: Production-quality code with full testing and documentation
+5. **Universality**: Support for multiple data formats and integration with existing pipelines
 
-### 1.3 Kluczowe Wartości
+### 1.3 Key Values
 
-- **Privacy-First**: Wszystkie dane przetwarzane lokalnie, zero wycieków do chmury
-- **Air-Gap Compatible**: Działa w środowiskach izolowanych, bez dostępu do internetu
-- **CPU-Only**: Nie wymaga GPU, działa na standardowych serwerach
-- **Open Source Core**: Podstawowa funkcjonalność dostępna jako open source (MIT License)
+- **Privacy-First**: All data processed locally, zero cloud leaks
+- **Air-Gap Compatible**: Works in isolated environments, no internet access required
+- **CPU-Only**: No GPU required, runs on standard servers
+- **Open Source Core**: Core functionality available as open source (MIT License)
 
 ---
 
@@ -1239,6 +1239,11 @@ cd entropyguard
 python -m poetry install
 ```
 
+**End User (PyPI - Recommended)**:
+```bash
+pip install entropyguard
+```
+
 **End User (pip + Git)**:
 ```bash
 pip install "git+https://github.com/DamianSiuta/entropyguard.git"
@@ -1301,16 +1306,24 @@ docker run -v $(pwd)/data:/data entropyguard \
 - Progress bars
 - Batched embeddings
 
-**v1.21** (Current Development):
+**v1.21** (Development):
 - Performance benchmarks
 - Memory profiling tools
 - Documentation updates
 - Test coverage improvements
 
+**v1.22** (Current - Production Ready):
+- Checkpoint/Resume system for fault tolerance
+- Standardized exit codes (sysexits.h compliant)
+- Memory checks before materialization (OOM prevention)
+- PyPI release for easy installation
+- Enhanced type hints and code quality
+- Comprehensive English documentation
+
 ### 14.2 Future Plans
 
-**v1.22+**:
-- Streaming FAISS (dla 100GB+ datasets)
+**v1.23+**:
+- Streaming FAISS (for 100GB+ datasets)
 - GPU support (optional)
 - More embedding models
 - Performance optimizations
@@ -1386,8 +1399,8 @@ docker run -v $(pwd)/data:/data entropyguard \
 
 ---
 
-**Koniec Dokumentacji**
+**End of Documentation**
 
-*Ostatnia aktualizacja: v1.20.0*
+*Last updated: v1.22.0*
 
 
