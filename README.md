@@ -122,7 +122,16 @@ entropyguard \
 
 ## 📦 Installation
 
-### Option 1: pip (Recommended)
+### Option 1: pip from PyPI (Recommended)
+
+```bash
+pip install entropyguard
+```
+
+**Requirements:**
+- Python 3.10, 3.11, or 3.12 (3.13 not supported yet)
+
+### Option 2: Install from Git
 
 ```bash
 pip install "git+https://github.com/DamianSiuta/entropyguard.git"
@@ -132,7 +141,7 @@ pip install "git+https://github.com/DamianSiuta/entropyguard.git"
 - Python 3.10, 3.11, or 3.12 (3.13 not supported yet)
 - `git` available on your system
 
-### Option 2: Docker
+### Option 3: Docker
 
 ```bash
 # Build image
@@ -145,7 +154,7 @@ docker run -v $(pwd):/data entropyguard:latest \
   --text-column text
 ```
 
-### Option 3: Development Setup
+### Option 4: Development Setup
 
 ```bash
 git clone https://github.com/DamianSiuta/entropyguard.git
