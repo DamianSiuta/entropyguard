@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 import polars as pl
 
-from entropyguard.cli.pipeline import Pipeline
+from entropyguard.core import Pipeline, PipelineConfig
 
 
 class TestPipelineIntegration:
@@ -45,14 +45,16 @@ class TestPipelineIntegration:
 
             try:
                 # Run pipeline
-                pipeline = Pipeline()
-                result = pipeline.run(
+                config = PipelineConfig(
                     input_path=input_path,
                     output_path=output_path,
                     text_column="text",
                     min_length=10,
                     dedup_threshold=0.95,
+                    show_progress=False
                 )
+                pipeline = Pipeline()
+                result = pipeline.run(config)
 
                 # Verify pipeline succeeded
                 assert result["success"] is True
@@ -104,15 +106,17 @@ class TestPipelineIntegration:
                 output_path = f.name
 
             try:
-                pipeline = Pipeline()
-                result = pipeline.run(
+                config = PipelineConfig(
                     input_path=input_path,
                     output_path=output_path,
                     text_column="text",
                     required_columns=["text"],  # Should pass
                     min_length=1,
                     dedup_threshold=0.9,
+                    show_progress=False
                 )
+                pipeline = Pipeline()
+                result = pipeline.run(config)
 
                 assert result["success"] is True
 
@@ -140,20 +144,24 @@ class TestPipelineIntegration:
                 output_path = f.name
 
             try:
-                pipeline = Pipeline()
-                result = pipeline.run(
+                config = PipelineConfig(
                     input_path=input_path,
                     output_path=output_path,
                     text_column="text",
                     required_columns=["text", "id"],  # "id" is missing
                     min_length=1,
                     dedup_threshold=0.9,
+                    show_progress=False
                 )
-
-                # Should fail at schema validation
-                assert result["success"] is False
-                assert "error" in result
-                assert "missing" in result["error"].lower() or "required" in result["error"].lower()
+                pipeline = Pipeline()
+                
+                # Should raise ValidationError
+                import pytest
+                from entropyguard.core.errors import ValidationError
+                with pytest.raises(ValidationError) as exc_info:
+                    pipeline.run(config)
+                
+                assert "missing" in exc_info.value.message.lower() or "required" in exc_info.value.message.lower()
 
             finally:
                 if os.path.exists(output_path):
@@ -183,14 +191,16 @@ class TestPipelineIntegration:
                 output_path = f.name
 
             try:
-                pipeline = Pipeline()
-                result = pipeline.run(
+                config = PipelineConfig(
                     input_path=input_path,
                     output_path=output_path,
                     text_column="text",
                     min_length=1,
                     dedup_threshold=0.99,  # Very high threshold for exact duplicates
+                    show_progress=False
                 )
+                pipeline = Pipeline()
+                result = pipeline.run(config)
 
                 assert result["success"] is True
 
@@ -232,14 +242,16 @@ class TestPipelineIntegration:
                 output_path = f.name
 
             try:
-                pipeline = Pipeline()
-                result = pipeline.run(
+                config = PipelineConfig(
                     input_path=input_path,
                     output_path=output_path,
                     text_column="text",
                     min_length=1,
                     dedup_threshold=0.9,
+                    show_progress=False
                 )
+                pipeline = Pipeline()
+                result = pipeline.run(config)
 
                 assert result["success"] is True
                 assert "stats" in result

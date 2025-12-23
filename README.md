@@ -1,48 +1,253 @@
-## ⚠️ Runtime Compatibility Warning
+# 🛡️ EntropyGuard v1.22.0
 
-EntropyGuard currently supports **Python 3.10, 3.11 and 3.12** only.  
-Python **3.13 is _not_ supported** due to missing prebuilt wheels for key dependencies (`numpy < 2.0`, `faiss-cpu`).
+<div align="center">
 
-# 🛡️ EntropyGuard
-### Semantic Data Optimization Engine for LLMs
+**The Unbreakable RAG Data Cleaner**
 
-## Overview
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://www.docker.com/)
+[![Production Ready](https://img.shields.io/badge/status-production--ready-green.svg)](https://github.com/DamianSiuta/entropyguard)
 
-EntropyGuard is a high-performance data engineering pipeline designed to prevent "Model Collapse"—a critical issue where machine learning models degrade due to training on low-quality, redundant, or contaminated data. The system addresses this challenge by providing a comprehensive solution that cleans, validates, and semantically deduplicates datasets to ensure high-quality training data for Large Language Models (LLMs).
+**Enterprise-grade semantic data deduplication and sanitization engine for LLM training data.**
 
-What sets EntropyGuard apart is its **complete local execution** capability. The entire pipeline runs on CPU-only infrastructure, making it **air-gap compatible** and **privacy-compliant**. No data ever leaves your machine, ensuring maximum security for sensitive datasets while delivering enterprise-grade data optimization results.
+[Features](#-key-features) • [Quick Start](#-quick-start) • [Installation](#-installation) • [Documentation](#-documentation)
 
-## 🚀 Key Features
+</div>
 
-* **Hybrid Deduplication Engine:** Two-stage deduplication strategy that delivers massive performance gains. **Stage 1** uses `xxhash` for lightning-fast exact duplicate removal (hash-based), eliminating identical content before expensive AI processing. **Stage 2** applies semantic similarity detection using `sentence-transformers` and `FAISS` only on survivors, dramatically reducing computational costs and processing time. This hybrid approach provides the best of both worlds: speed and intelligence.
+---
 
-* **Unix Pipes & Streaming:** Built for data engineering workflows. Reads from `stdin` and writes to `stdout`, making EntropyGuard a perfect fit for Unix pipelines, `n8n` workflows, Apache Airflow DAGs, and bash scripting. All logs and progress indicators are automatically redirected to `stderr`, ensuring clean, parsable JSONL output on `stdout` for downstream processing.
+## Why EntropyGuard?
 
-* **ROI & Cost Report:** Automatically generates a marketing-grade cost savings report at the end of each run. Calculates estimated API cost savings (based on OpenAI embedding pricing) by tracking all dropped characters from exact duplicates, semantic duplicates, and validation filters. See exactly how much you're saving in real dollars.
+### The Problem: Dirty Data = Hallucinations & Wasted Money
 
-* **Semantic Deduplication:** Uses `sentence-transformers` and `FAISS` (Vector Search) to find and remove meanings-based duplicates, not just exact matches. This advanced approach identifies semantically similar content even when word-for-word matches don't exist.
+Training Large Language Models on contaminated, redundant, or low-quality data leads to:
+- **Model Collapse** — Degraded performance from duplicate content
+- **Hallucinations** — Inaccurate outputs from poor training data
+- **Wasted Compute** — Paying for processing duplicate data multiple times
+- **Compliance Risks** — PII and sensitive data in training sets
 
-* **Universal Ingestion:** Single CLI interface for heterogeneous data sources – Excel (`.xlsx`), Parquet (`.parquet`), CSV, and JSONL/NDJSON – all normalized into a unified processing pipeline.
+### The Solution: Local CPU Processing with Hybrid Deduplication
 
-* **Lazy Architecture:** Built on **Polars LazyFrame** to enable streaming-style, lazy execution. Datasets larger than RAM can be processed efficiently by deferring materialization until the final write step.
+EntropyGuard runs **100% locally** on your CPU—no data ever leaves your machine. Perfect for:
+- **Air-gapped environments** (no cloud dependencies)
+- **Privacy compliance** (GDPR, HIPAA, SOC 2)
+- **Cost efficiency** (no API calls, no cloud fees)
+- **Enterprise security** (complete data sovereignty)
 
-* **Data Sanitization:** Automated removal of PII (Personally Identifiable Information such as emails, phones), HTML tags, and noise. Ensures clean, structured data ready for training.
+---
 
-* **Strict Quality Gates:** Integrated validation pipeline that drops empty or low-quality rows before processing. Only validated, high-quality data proceeds through the pipeline.
+## ✨ Key Features
 
-* **Text Chunking (RAG-Ready):** Advanced recursive text splitting with custom separators and hard fallback for CJK languages. Splits on paragraph boundaries (`\n\n`), lines (`\n`), words (` `), or characters (for languages without whitespace). Configurable overlap and separator hierarchy. **Note:** CJK languages (Chinese/Japanese/Korean) are supported via hard character-level splitting, as they lack whitespace delimiters.
+### 🛡️ **Fault Tolerant**
+- **Checkpoint/Resume System** — Automatic recovery from failures
+- **Memory Safety** — Chunked processing prevents OOM errors
+- **Graceful Shutdown** — SIGINT/SIGTERM handling (Windows + Unix)
+- **Error Recovery** — Automatic retry with exponential backoff
 
-* **Multilingual & Configurable:** Pluggable embedding backend via `--model-name` (default: `all-MiniLM-L6-v2`). Swap in multilingual models such as `paraphrase-multilingual-MiniLM-L12-v2` for German, Polish, or global datasets without changing code.
+### 🚀 **High Performance**
+- **Hybrid Engine** — Hash-based exact dedup + AI semantic similarity
+- **Unix Pipes Support** — Stream processing for data engineering workflows
+- **Lazy Evaluation** — Polars LazyFrame for datasets larger than RAM
+- **Optimized Memory** — Pre-materialization checks prevent OOM
 
-* **Docker Ready:** First-class container support with a lightweight `python:3.10-slim` image and `Dockerfile` provided. Ship the same EntropyGuard pipeline to any environment that runs Docker.
+### 📉 **Memory Safe**
+- **Chunked Processing** — Process datasets larger than available RAM
+- **Memory Profiling** — Track memory usage per pipeline stage
+- **Resource Guards** — Disk space and memory checks before operations
 
-* **Enterprise Grade:** Fully typed (MyPy strict), tested (Pytest), and managed via Poetry. Production-ready codebase with comprehensive test coverage and maintainable architecture.
+### 📊 **Observability**
+- **Prometheus Metrics** — Export pipeline metrics for monitoring
+- **Structured Logging** — JSON logs with correlation IDs
+- **Progress Tracking** — Real-time ETA and throughput estimation
+- **Audit Logs** — Complete audit trail of all operations
+
+### 🔒 **Enterprise Ready**
+- **Standard Exit Codes** — sysexits.h compliant for automation
+- **Type Safety** — Full type hints (MyPy strict compatible)
+- **Configuration Validation** — Pydantic-based schema validation
+- **Input Validation** — Format detection and consistency checks
+
+---
+
+## ⚡ Quick Start
+
+### The "Magic" Command
+
+```bash
+# Unix pipe example (the most common use case)
+cat data.jsonl | entropyguard --dedup-threshold 0.95 > clean.jsonl
+```
+
+### Basic Usage
+
+```bash
+# File-to-file processing
+entropyguard \
+  --input data.jsonl \
+  --output clean.jsonl \
+  --text-column text \
+  --dedup-threshold 0.95
+
+# With custom settings
+entropyguard \
+  --input data.ndjson \
+  --output cleaned.ndjson \
+  --text-column content \
+  --min-length 100 \
+  --dedup-threshold 0.9 \
+  --chunk-size 500
+```
+
+### Advanced: Checkpoint & Resume
+
+```bash
+# Enable automatic checkpoint recovery
+entropyguard \
+  --input large_dataset.jsonl \
+  --output clean.jsonl \
+  --checkpoint-dir ./checkpoints \
+  --text-column text
+
+# Resume from checkpoint manually
+entropyguard \
+  --input large_dataset.jsonl \
+  --output clean.jsonl \
+  --checkpoint-dir ./checkpoints \
+  --resume \
+  --text-column text
+```
+
+---
+
+## 📦 Installation
+
+### Option 1: pip (Recommended)
+
+```bash
+pip install "git+https://github.com/DamianSiuta/entropyguard.git"
+```
+
+**Requirements:**
+- Python 3.10, 3.11, or 3.12 (3.13 not supported yet)
+- `git` available on your system
+
+### Option 2: Docker
+
+```bash
+# Build image
+docker build -t entropyguard:latest .
+
+# Run container
+docker run -v $(pwd):/data entropyguard:latest \
+  --input /data/input.jsonl \
+  --output /data/output.jsonl \
+  --text-column text
+```
+
+### Option 3: Development Setup
+
+```bash
+git clone https://github.com/DamianSiuta/entropyguard.git
+cd entropyguard
+poetry install
+```
+
+---
+
+## 🏢 Enterprise / Advanced Usage
+
+### Configuration File (`.entropyguardrc.json`)
+
+Create a configuration file in your home directory or project root:
+
+```json
+{
+  "text_column": "text",
+  "min_length": 100,
+  "dedup_threshold": 0.95,
+  "chunk_size": 500,
+  "chunk_overlap": 50,
+  "remove_pii": true,
+  "normalize_text": true,
+  "show_progress": true
+}
+```
+
+Then run:
+
+```bash
+entropyguard --input data.jsonl --output clean.jsonl
+```
+
+### Monitoring & Observability
+
+```bash
+# Enable Prometheus metrics
+entropyguard \
+  --input data.jsonl \
+  --output clean.jsonl \
+  --metrics-port 9090 \
+  --text-column text
+
+# Enable memory profiling
+entropyguard \
+  --input data.jsonl \
+  --output clean.jsonl \
+  --profile-memory \
+  --text-column text
+
+# JSON logs for machine parsing
+entropyguard \
+  --input data.jsonl \
+  --output clean.jsonl \
+  --json-logs \
+  --text-column text
+```
+
+### Exit Codes
+
+EntropyGuard follows the sysexits.h standard:
+
+| Code | Meaning |
+|------|---------|
+| `0` | Success |
+| `1` | General error |
+| `2` | Usage error (invalid arguments) |
+| `64` | Data format error |
+| `65` | Input file error |
+| `66` | Output file error |
+| `70` | Software error (internal bug) |
+| `130` | Process interrupted (SIGINT/Ctrl+C) |
+
+---
+
+## 📊 Comparison
+
+| Feature | EntropyGuard | Basic Scripts | Vector DBs |
+|---------|-------------|---------------|------------|
+| **Exact Deduplication** | ✅ Hash-based (fast) | ⚠️ Manual | ❌ |
+| **Semantic Deduplication** | ✅ AI-powered | ❌ | ✅ |
+| **Local Processing** | ✅ 100% local | ✅ | ⚠️ Requires DB |
+| **Memory Safety** | ✅ Chunked processing | ⚠️ Manual | ⚠️ Depends on DB |
+| **Fault Tolerance** | ✅ Checkpoint/Resume | ❌ | ⚠️ Depends on DB |
+| **Unix Pipes** | ✅ Native support | ⚠️ Manual | ❌ |
+| **Observability** | ✅ Metrics + Logs | ❌ | ⚠️ Depends on DB |
+| **Configuration** | ✅ Pydantic validation | ❌ | ⚠️ DB-specific |
+| **Type Safety** | ✅ Full type hints | ❌ | ⚠️ Depends on language |
+
+---
 
 ## 🛠️ Tech Stack
 
-* **Core:** Python 3.10+, Polars
-* **AI/ML:** PyTorch (CPU), FAISS, Sentence-Transformers
-* **Infrastructure:** Poetry, Docker-ready structure
+- **Core:** Python 3.10+, Polars (LazyFrame)
+- **AI/ML:** PyTorch (CPU), FAISS, Sentence-Transformers
+- **Validation:** Pydantic v2
+- **Logging:** structlog (optional)
+- **Metrics:** Prometheus Client (optional)
+- **Infrastructure:** Poetry, Docker-ready
+
+---
 
 ## 📋 Edition Comparison
 
@@ -59,354 +264,50 @@ EntropyGuard is available in two editions:
 | **Web Dashboard** | ❌ | ✅ Professional Analytics Platform |
 | **Real-time Monitoring** | ❌ | ✅ Live telemetry & metrics |
 | **Alert System** | ❌ | ✅ Custom alert rules (Watchtower) |
-| **Log Explorer** | ❌ | ✅ Advanced filtering & search |
-| **Role-Based Access Control** | ❌ | ✅ Multi-user with RBAC |
 | **API Access** | ❌ | ✅ RESTful API |
-| **SSO Integration** | ❌ | ✅ SAML 2.0, OAuth 2.0 (Azure AD, Okta, etc.) |
-| **Compliance Tools** | ❌ | ✅ GDPR, HIPAA, SOC 2 compliance reporting |
-| **Enhanced Audit Logs** | ❌ | ✅ Immutable audit trails, compliance exports |
+| **SSO Integration** | ❌ | ✅ SAML 2.0, OAuth 2.0 |
 | **Support** | Community | Priority support with SLA |
-| **License** | Open Source (MIT License) | Commercial license required |
+| **License** | MIT License | Commercial license required |
 
-> **📌 Legal Notice:** Enterprise features (including the Control Plane, Dashboard, API, and Alerting System) are **proprietary software** covered by a commercial license. These components are **NOT included** in the Open Source release and are **NOT** subject to the MIT license terms. The Community Edition contains only the CLI tool and core data processing pipeline, which are fully open source.
-
-## ⚡ Quick Start
-
-### 1. Installation (Developer Workflow)
-
-```bash
-git clone https://github.com/DamianSiuta/entropyguard.git
-cd entropyguard
-python -m poetry install
-```
-
-### 1.b Installation (End User, via pip + Git)
-
-For consumers who only want to install the CLI tool (no local development setup), you can install directly from Git using `pip`:
-
-```bash
-pip install "git+https://github.com/DamianSiuta/entropyguard.git"
-```
-
-Requirements:
-- A supported Python runtime (**3.10, 3.11 or 3.12**).
-- `git` available on your system (`pip` uses it to fetch the repository).
-
-### 2. Running the Pipeline (Automated)
-
-We provide a PowerShell script for one-click execution:
-
-```powershell
-.\run_pipeline.ps1
-```
-
-### 3. Manual Usage (CLI)
-
-#### Unix Pipe Mode (Ideal for n8n / ETL / Airflow)
-
-EntropyGuard v1.11+ supports Unix pipes for seamless integration with data engineering workflows:
-
-```bash
-# Read from stdin, write to stdout (perfect for pipelines)
-cat huge_data.jsonl | entropyguard --input - --output - --text-column text --dedup-threshold 0.85 > clean_data.jsonl
-
-# Or with auto-detected text column
-cat data.jsonl | entropyguard --input - --output - --dedup-threshold 0.85 | jq .
-
-# Integration with n8n, Airflow, or bash scripts
-curl -s https://api.example.com/data.jsonl | \
-  entropyguard --input - --output - --min-length 50 | \
-  gzip > processed_data.jsonl.gz
-```
-
-**Note:** When using `--output -`, all logs and progress indicators are automatically redirected to `stderr`, ensuring clean JSONL output on `stdout` for downstream processing.
-
-#### File-Based Usage (Traditional)
-
-Basic example (local Python + Poetry):
-
-```bash
-python -m poetry run python -m entropyguard.cli.main \
-  --input data.jsonl \
-  --output clean.jsonl \
-  --min-length 50 \
-  --dedup-threshold 0.85
-```
-
-With custom chunking separators:
-
-```bash
-python -m entropyguard.cli.main \
-  --input data.jsonl \
-  --output clean.jsonl \
-  --chunk-size 512 \
-  --chunk-overlap 50 \
-  --separators "|" "\\n"
-```
-
-#### Expected Output Report
-
-After processing, EntropyGuard displays a cost savings report on `stderr`:
-
-```
-✅ EntropyGuard Processing Complete
-==================================================
-Input Records:        10,000
---------------------------------------------------
-🚫 Exact Dupes:       2,500  (Removed via Hash)
-🤖 Semantic Dupes:    500    (Removed via AI)
-📉 Total Reduction:   30.0%
-==================================================
-💰 Est. API Savings:  $1.52  (vs OpenAI embedding)
-==================================================
-```
-
-This report shows:
-- **Exact Dupes:** Fast hash-based duplicates removed (Stage 1)
-- **Semantic Dupes:** AI-detected semantic duplicates removed (Stage 2)
-- **Total Reduction:** Overall percentage of data eliminated
-- **Est. API Savings:** Calculated cost savings based on OpenAI embedding pricing
-
-### 4. Docker Deployment (Recommended for Production)
-
-Build the image:
-
-```bash
-docker build -t entropyguard .
-```
-
-Run the pipeline against mounted data (any supported format: `.xlsx`, `.parquet`, `.csv`, `.jsonl`):
-
-```bash
-docker run -v $(pwd)/data:/data entropyguard --input /data/file.xlsx --output /data/clean.parquet
-```
-
-## 📊 Architecture
-
-The EntropyGuard pipeline follows a structured, modular architecture that processes data through sequential stages:
-
-```
-[Raw Data: JSONL / CSV / Excel / Parquet / stdin]
-        ↓
-[Universal Ingestion: Excel/Parquet/CSV/JSONL Loader]
-        ↓
-[Lazy Stream (Polars LazyFrame)]
-        ↓
-[Validation]
-        ↓
-[Sanitization]
-        ↓
-[Text Chunking (Optional, if --chunk-size provided)]
-        ↓
-[Hybrid Deduplication v1.11+]
-        ├─ Stage 1: Exact Match (xxhash hash-based, fast)
-        └─ Stage 2: Semantic Similarity (FAISS, only on survivors)
-        ↓
-[Cost Savings Calculation]
-        ↓
-[Clean Data (NDJSON / stdout / downstream sinks)]
-```
-
-**Pipeline Stages:**
-1. **Ingestion:** Loads data from Excel, Parquet, CSV, JSONL/NDJSON, or `stdin` into a unified lazy representation.
-2. **Validation:** Applies quality gates to filter out invalid entries before expensive processing.
-3. **Sanitization:** Removes PII, HTML tags, and noise using configurable, enterprise-safe rules.
-4. **Chunking (Optional):** Splits long texts into smaller, overlapping fragments using a recursive delimiter-aware strategy. Enabled when `--chunk-size` is provided. Critical for RAG workflows.
-5. **Hybrid Deduplication (v1.11+):** Two-stage deduplication strategy:
-   - **Stage 1 (Exact Match):** Fast hash-based deduplication using `xxhash` to remove identical content before expensive AI processing.
-   - **Stage 2 (Semantic):** Vector embedding and FAISS-based semantic similarity detection, applied only to survivors from Stage 1. Uses `sentence-transformers` with a configurable `--model-name` for monolingual or multilingual workloads.
-6. **Cost Savings Calculation:** Tracks all dropped characters and calculates estimated API cost savings based on OpenAI embedding pricing.
-7. **Clean Data:** Outputs optimized, high-quality dataset to file or `stdout`, suitable for LLM training or analytics workloads.
-
-## 📜 Audit Log & Compliance
-
-EntropyGuard can optionally produce a **machine-readable audit log** for every row that was dropped or de-duplicated.
-
-- Use the `--audit-log` flag to write a JSON report:
-
-```bash
-python -m entropyguard.cli.main \
-  --input data.jsonl \
-  --output clean.jsonl \
-  --min-length 50 \
-  --dedup-threshold 0.85 \
-  --audit-log audit.json
-```
-
-Each entry in `audit.json` describes a single removed row:
-
-```json
-{
-  "row_index": 500,
-  "reason": "Duplicate",
-  "details": "Duplicate of original row 10"
-}
-```
-
-or, for validation-based drops:
-
-```json
-{
-  "row_index": 123,
-  "reason": "Validation: too_short",
-  "details": "len=5 (min_length=10)"
-}
-```
-
-This allows compliance teams and auditors to answer:  
-**“Which rows were removed, and why?”** — without inspecting raw data manually.
-
-## 🧾 CLI Reference
-
-All options for `python -m entropyguard.cli.main` (or the `entropyguard` entrypoint):
-
-| Flag                | Required | Default               | Description                                                                                   |
-|---------------------|----------|-----------------------|-----------------------------------------------------------------------------------------------|
-| `--input`           | No       | `-` (stdin)           | Path to input data file (`.xlsx`, `.parquet`, `.csv`, `.jsonl`/`.ndjson`, `.json`). Use `-` or omit to read from `stdin`. |
-| `--output`          | No       | `-` (stdout)          | Path to output data file (NDJSON/JSONL). Use `-` or omit to write to `stdout`. All logs redirected to `stderr` when using stdout. |
-| `--text-column`     | No       | Auto-detected         | Name of the text column to process. **Optional** – auto-detected if not provided.            |
-| `--audit-log`       | No       | `None`                | Path to JSON file with audit entries for dropped/duplicate rows (compliance & traceability). |
-| `--dedup-threshold` | No       | `0.85` (recommended)  | Similarity threshold for deduplication (0.0–1.0). Higher = stricter (fewer duplicates found). |
-| `--min-length`      | No       | `50`                  | Minimum text length (characters) after sanitization. Shorter rows are dropped.               |
-| `--chunk-size`      | No       | `None` (disabled)     | Optional chunk size (characters) for splitting long texts before embedding. Recommended: 512 for RAG. |
-| `--chunk-overlap`   | No       | `50`                  | Overlap size (characters) between consecutive chunks. Only used if `--chunk-size` is set.     |
-| `--separators`      | No       | Default hierarchy     | Custom separators for chunking (space-separated). Use `\\n` for newline, `\\t` for tab. Example: `--separators "|" "\\n"`. Default: paragraph breaks, newlines, spaces, characters. |
-| `--model-name`      | No       | `all-MiniLM-L6-v2`    | HuggingFace / sentence-transformers model for embeddings (supports multilingual models).      |
-
-## 🌟 Feature Highlights
-
-- **Hybrid Deduplication Engine (v1.11+):**  
-  Two-stage deduplication strategy: **Stage 1** uses `xxhash` for lightning-fast exact duplicate removal (hash-based), eliminating identical content before expensive AI processing. **Stage 2** applies semantic similarity detection using `sentence-transformers` + FAISS only on survivors. This hybrid approach delivers massive performance gains by avoiding expensive embedding computation for exact duplicates.
-
-- **Unix Pipes & Streaming (v1.11+):**  
-  Built for data engineering workflows. Reads from `stdin` (`--input -`) and writes to `stdout` (`--output -`), making EntropyGuard perfect for Unix pipelines, `n8n` workflows, Apache Airflow DAGs, and bash scripting. All logs automatically redirected to `stderr`, ensuring clean, parsable JSONL output on `stdout`.
-
-- **ROI & Cost Report (v1.11+):**  
-  Automatically generates a marketing-grade cost savings report showing estimated API cost savings (based on OpenAI embedding pricing). Tracks all dropped characters from exact duplicates, semantic duplicates, and validation filters. See exactly how much you're saving in real dollars with each run.
-
-- **Semantic Deduplication:**  
-  Removes duplicates based on **meaning**, not exact string match, using sentence-transformers + FAISS.
-
-- **PII Removal & Text Sanitization:**  
-  Regex-based PII stripping (emails, phones, IDs), HTML tag removal, aggressive normalization and noise reduction.
-
-- **Local Execution (CPU / Air-Gap Friendly):**  
-  Designed to run **fully on-premise**, CPU-only. No data leaves your environment by default.
-
-- **Text Chunking for RAG:**  
-  Optional recursive text splitter (no LangChain dependency) that respects paragraph/line/word boundaries. Essential for preparing long documents for embedding models with fixed context windows.
-
-- **Universal Ingestion & Lazy Processing:**  
-  Single CLI handling Excel, Parquet, CSV, JSONL; built on Polars LazyFrame to support datasets larger than RAM.
-
-- **Docker Support:**  
-  Production-ready `Dockerfile` based on `python:3.10-slim` for reproducible, portable deployments.
-
-- **Enterprise-Grade Engineering:**  
-  Strict typing (MyPy), tests (Pytest), Poetry-managed dependencies, and audit logging for compliance scenarios.
+> **📌 Legal Notice:** Enterprise features (Control Plane, Dashboard, API, Alerting System) are **proprietary software** covered by a commercial license. These components are **NOT included** in the Open Source release and are **NOT** subject to the MIT license terms.
 
 ---
 
----
+## 📚 Documentation
 
-## 🏢 Enterprise Edition
-
-The **EntropyGuard Enterprise Edition** extends the Community CLI tool with a comprehensive **Control Plane** featuring enterprise-grade capabilities for organizations requiring advanced monitoring, compliance, and security features.
-
-### Enterprise Features
-
-- **Professional Web Dashboard:** Real-time analytics, KPI monitoring, and data visualization with a Datadog/Splunk-style interface. Visualize data processing metrics, system health, and performance trends at a glance.
-
-- **RESTful API:** Full programmatic access for seamless integration with your existing data pipelines, CI/CD systems, and orchestration tools. Build custom integrations and automations tailored to your infrastructure.
-
-- **Real-time Telemetry & Monitoring:** Live monitoring of data processing jobs with detailed metrics, performance tracking, and resource utilization insights. Identify bottlenecks and optimize processing workflows in real-time.
-
-- **Alert System (Watchtower):** Advanced alerting engine with custom alert rules, configurable thresholds, and flexible time windows. Get notified immediately when anomalies are detected or processing thresholds are exceeded.
-
-- **Log Explorer:** Advanced search and filtering capabilities for audit logs with powerful query syntax. Trace data lineage, investigate issues, and perform forensic analysis with enterprise-grade log exploration tools.
-
-- **Role-Based Access Control (RBAC):** Granular multi-user support with admin/user roles and permission management. Control who can access which features and data, ensuring proper security boundaries.
-
-- **JWT Authentication:** Secure API access with industry-standard token-based authentication. Integrates seamlessly with existing identity providers and SSO solutions.
-
-- **Single Sign-On (SSO):** Enterprise SSO integration supporting SAML 2.0 and OAuth 2.0 protocols. Connect with your existing identity provider (Azure AD, Okta, Google Workspace, etc.) for seamless user authentication.
-
-- **Compliance & Audit Logs:** Enhanced audit logging with tamper-proof audit trails, compliance reporting, and regulatory compliance support (GDPR, HIPAA, SOC 2). Full traceability of all system actions and data access.
-
-- **Advanced Audit Capabilities:** 
-  - Immutable audit logs with cryptographic integrity verification
-  - Automated compliance reports (GDPR, HIPAA, SOC 2 ready)
-  - User activity tracking and data access logging
-  - Export capabilities for external audit systems
-
-### Getting Started with Enterprise
-
-For Enterprise licensing, deployment guides, pricing information, and dedicated support, please contact our sales team.
-
-> **⚠️ IMPORTANT LEGAL NOTICE:**
-> 
-> **Enterprise features (including SSO, Compliance tools, Enhanced Audit Logs, Control Plane, Dashboard, API, and Alerting System) are proprietary software covered by a commercial license. These components are NOT included in the Open Source release and are NOT subject to the MIT license terms.**
-> 
-> **The Community Edition contains only the CLI tool and core data processing pipeline, which are fully open source and available under the permissive license specified in the LICENSE file.**
+- [Checkpoint & Resume Guide](./CHECKPOINT_RESUME_GUIDE.md)
+- [Project Comprehensive Documentation](./PROJECT_COMPREHENSIVE_DOCUMENTATION.md)
+- [Open Core Strategy](./OPEN_CORE_STRATEGY.md)
 
 ---
 
 ## 🤝 Contributing
 
-We welcome contributions to the **Community Edition**! This includes:
-
-- Bug fixes and improvements to the CLI tool
-- Documentation enhancements
-- Test coverage improvements
-- Performance optimizations
-- Support for new data formats
-
-Please see our [Contributing Guidelines](CONTRIBUTING.md) for details on how to submit pull requests.
+Contributions are welcome! Please read our contributing guidelines and code of conduct before submitting pull requests.
 
 ---
 
 ## 📄 License
 
-### Community Edition (Open Source)
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-The **EntropyGuard Community Edition** (CLI tool and core data processing pipeline) is licensed under the **MIT License**. This means you are free to:
-- Use the software for any purpose (including commercial use)
-- Modify and distribute the software
-- Sublicense and sell copies of the software
+---
 
-See the [LICENSE](LICENSE) file for full terms and conditions.
+## 🙏 Acknowledgments
 
-### Enterprise Edition (Commercial)
+Built with ❤️ by the EntropyGuard Team
 
-The **EntropyGuard Enterprise Edition** (Control Plane, Dashboard, API, SSO, Compliance tools, Enhanced Audit Logs, and all enterprise features) is **proprietary software** requiring a **commercial license**. 
+**Special thanks to:**
+- [Polars](https://www.pola.rs/) for the amazing DataFrame library
+- [Sentence-Transformers](https://www.sbert.net/) for semantic embeddings
+- [FAISS](https://github.com/facebookresearch/faiss) for vector similarity search
 
-**Enterprise features are NOT part of the Open Source release** and are **NOT distributed** in this repository. Enterprise components are subject to separate licensing terms and require a paid subscription.
+---
 
-For licensing inquiries, pricing, and enterprise deployment options, please contact our sales team.
+<div align="center">
 
-*Built for high-efficiency data engineering.*
+**[⬆ Back to Top](#-entropyguard-v1220)**
 
-## 🏆 Real World Validation (Banking77 Dataset)
+Made with ❤️ for the LLM community
 
-We processed **10,003 real customer banking queries** from the [Banking77 dataset](https://huggingface.co/datasets/banking77). 
-EntropyGuard reduced the dataset by **50.4%**, correctly identifying semantic duplicates that exact-match algorithms miss.
-
-### Results Summary
-
-- **Original rows:** 10,003
-- **After deduplication:** 4,957
-- **Duplicates removed:** 5,040 (50.4% reduction)
-- **Semantic duplicates found:** Pairs with different wording but identical meaning
-
-### Example Semantic Duplicates
-
-The following examples demonstrate EntropyGuard's ability to identify semantically similar queries that differ in wording:
-
-| Original Query | Removed Duplicate | Notes |
-|----------------|-------------------|-------|
-| `Hey, I attempted to top up my card today and for some reason it didn't work. When I did it the other way it worked just fine. Could you help me figure out why this is happening please?` | `Is there any reason why my card didn't work when I tried to top up?` | Different wording, same intent |
-| `Why did my credit card get declined for top up?` | `I don't know why my credit card was declined while I was trying to top-up. Was it something on my end or was there something wrong with the top-up function?` | Different wording, same intent |
-| `What does it mean when a payment is pending?` | `My card payment is just showing up as pending and it has been a while , what's going on with that, it should be going through at some point?` | Different wording, same intent |
-| `Can I change my PIN abroad?` | `I'm travelling abroad but I've run into a situation where I need to change my PIN immediately. Can I do this from here?` | Different wording, same intent |
-| `What does it mean when a payment is pending?` | `My card payment is showing up as pending for a very long time, what's going on with that, it should be going through at some point?` | Different wording, same intent |
-
+</div>

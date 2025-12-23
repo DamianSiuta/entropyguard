@@ -179,7 +179,7 @@ certificates/
 *.csr
 
 # ============================================
-# LOGS & SENSITIVE DATA
+# LOGS & SENSITIVE DATA - ENTERPRISE GRADE
 # ============================================
 *.log
 logs/
@@ -189,26 +189,51 @@ logs/
 audit.json
 audit_*.json
 *.audit
+audit_log.json
+memory_profile.json
+benchmark_results.csv
+*.metrics
+*.stats
 
 # ============================================
-# DATA FILES (May contain PII)
+# DATA FILES (May contain PII) - ENTERPRISE GRADE
 # ============================================
+# CRITICAL: Ignore ALL data files to prevent accidental commits
 *.csv
 *.parquet
 *.json
 *.jsonl
 *.xlsx
 *.xls
+*.ndjson
 data/
 datasets/
 raw_data/
 processed_data/
+# Specific patterns
 banking_*.jsonl
 banking_*.json
 demo_*.jsonl
 demo_*.json
 stress_*.jsonl
 final_test.jsonl
+output.jsonl
+clean*.jsonl
+*_clean.jsonl
+*_raw.jsonl
+*_test.jsonl
+# EXCEPTION: Allow config files
+!.entropyguardrc.json
+!config.json
+!*.config.json
+
+# ============================================
+# DEMO DATA
+# ============================================
+# Marketing demo data files - users can generate locally for testing
+# but should not be committed to repository
+marketing_demo.jsonl
+clean_output.jsonl
 
 # ============================================
 # PYTHON
