@@ -175,7 +175,8 @@ def cleanup_temp_files() -> None:
 def setup_logging(
     output_to_stdout: bool,
     verbose: bool = False,
-    json_logs: bool = False
+    json_logs: bool = False,
+    demo_mode: bool = False
 ) -> None:
     """
     Configure structured logging based on output mode and verbosity.
@@ -184,13 +185,15 @@ def setup_logging(
         output_to_stdout: If True, all logs will be redirected to stderr.
         verbose: If True, set log level to DEBUG.
         json_logs: If True, output logs as JSON (machine-readable).
+        demo_mode: If True, hide INFO logs (show only WARNING+).
     """
     global _logger
     from entropyguard.core.logger import setup_logging as setup_structured_logging
     _logger = setup_structured_logging(
         json_logs=json_logs,
         verbose=verbose,
-        output_to_stdout=output_to_stdout
+        output_to_stdout=output_to_stdout,
+        demo_mode=demo_mode
     )
 
 
@@ -241,6 +244,20 @@ def read_stdin_as_tempfile() -> str:
         raise ValueError(f"Failed to read from stdin: {str(e)}") from e
 
 
+def format_number(num: int) -> str:
+    """Format number with thousands separators."""
+    return f"{num:,}"
+
+
+def format_bytes(bytes_val: int) -> str:
+    """Format bytes as human-readable size."""
+    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if bytes_val < 1024.0:
+            return f"{bytes_val:.2f} {unit}"
+        bytes_val /= 1024.0
+    return f"{bytes_val:.2f} PB"
+
+
 def print_summary(
     stats: PipelineStats,
     dry_run: bool,
@@ -248,7 +265,7 @@ def print_summary(
     output_path: str
 ) -> None:
     """
-    Log pipeline summary using structured logging.
+    Print beautiful ASCII table summary to stderr.
     
     Args:
         stats: Pipeline statistics
@@ -256,8 +273,6 @@ def print_summary(
         output_is_stdout: Whether output went to stdout
         output_path: Path to output file
     """
-    logger = get_logger()
-    
     original_rows = stats.get('original_rows', 0)
     exact_dupes = stats.get('exact_duplicates_removed', 0)
     semantic_dupes = stats.get('semantic_duplicates_removed', 0)
@@ -266,19 +281,46 @@ def print_summary(
     
     reduction_pct = (total_dropped / original_rows * 100) if original_rows > 0 else 0.0
     tokens_saved = int(total_dropped_chars / 4) if total_dropped_chars > 0 else 0
+    storage_saved = total_dropped_chars
     
-    logger.info(
-        "pipeline_complete",
-        dry_run=dry_run,
-        original_rows=original_rows,
-        exact_duplicates_removed=exact_dupes,
-        semantic_duplicates_removed=semantic_dupes,
-        total_dropped=total_dropped,
-        reduction_percent=round(reduction_pct, 1),
-        tokens_saved=tokens_saved,
-        total_dropped_chars=total_dropped_chars,
-        output_path=output_path if not output_is_stdout else "stdout"
-    )
+    # Calculate output rows
+    output_rows = original_rows - total_dropped
+    
+    # Print to stderr (so it doesn't interfere with stdout output)
+    print("\n" + "=" * 70, file=sys.stderr)
+    print(" " * 20 + "ENTROPYGUARD PIPELINE SUMMARY", file=sys.stderr)
+    print("=" * 70, file=sys.stderr)
+    
+    # Build table
+    table_rows = [
+        ("Input Records", format_number(original_rows)),
+        ("Output Records", format_number(output_rows)),
+        ("Exact Duplicates Removed", format_number(exact_dupes)),
+        ("Semantic Duplicates Removed", format_number(semantic_dupes)),
+        ("Total Reduction", f"{reduction_pct:.1f}%"),
+        ("Est. Tokens Saved", format_number(tokens_saved)),
+        ("Storage Saved", format_bytes(storage_saved)),
+    ]
+    
+    if dry_run:
+        table_rows.append(("Mode", "DRY RUN (no changes made)"))
+    
+    # Find max width for alignment
+    max_label_width = max(len(label) for label, _ in table_rows)
+    
+    # Print table
+    for label, value in table_rows:
+        padding = " " * (max_label_width - len(label))
+        print(f"  {label}:{padding}  {value}", file=sys.stderr)
+    
+    print("=" * 70, file=sys.stderr)
+    
+    if not output_is_stdout:
+        print(f"  Output saved to: {output_path}", file=sys.stderr)
+    else:
+        print(f"  Output written to: stdout", file=sys.stderr)
+    
+    print("=" * 70 + "\n", file=sys.stderr)
 
 
 def write_to_stdout(data: pl.DataFrame) -> None:
@@ -369,7 +411,12 @@ def run_pipeline_logic(args: argparse.Namespace) -> int:
     
     # Setup logging
     json_logs = getattr(args, 'json_logs', False)
-    setup_logging(output_to_stdout=output_is_stdout, verbose=args.verbose, json_logs=json_logs)
+    setup_logging(
+        output_to_stdout=output_is_stdout,
+        verbose=args.verbose,
+        json_logs=json_logs,
+        demo_mode=getattr(args, 'demo', False)
+    )
     logger = get_logger()
     
     # Start metrics server if requested
@@ -502,6 +549,15 @@ def run_pipeline_logic(args: argparse.Namespace) -> int:
     final_batch_size = merged_config.get("batch_size", getattr(args, 'batch_size', 10000))
     final_show_progress = merged_config.get("show_progress", not getattr(args, 'quiet', False))
     
+    # Handle memory profiling
+    profile_memory = getattr(args, 'profile_memory', False)
+    memory_report_path = getattr(args, 'memory_report_path', None)
+    
+    # Handle checkpointing
+    checkpoint_dir = getattr(args, 'checkpoint_dir', None)
+    resume = getattr(args, 'resume', False)
+    auto_resume = not getattr(args, 'no_auto_resume', False)  # Default: True (auto-resume enabled)
+    
     # Log configuration
     logger.info(
         "pipeline_started",
@@ -519,15 +575,6 @@ def run_pipeline_logic(args: argparse.Namespace) -> int:
         checkpoint_dir=checkpoint_dir,
         resume=resume
     )
-    
-    # Handle memory profiling
-    profile_memory = getattr(args, 'profile_memory', False)
-    memory_report_path = getattr(args, 'memory_report_path', None)
-    
-    # Handle checkpointing
-    checkpoint_dir = getattr(args, 'checkpoint_dir', None)
-    resume = getattr(args, 'resume', False)
-    auto_resume = not getattr(args, 'no_auto_resume', False)  # Default: True (auto-resume enabled)
     
     if resume and not checkpoint_dir:
         logger.error(
@@ -825,6 +872,13 @@ For more information, visit: https://github.com/DamianSiuta/entropyguard
     )
     
     parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="Demo mode: Hide INFO logs, show only progress bars and final summary. "
+             "Perfect for video demonstrations."
+    )
+    
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Simulate processing without running expensive operations. "
@@ -1055,7 +1109,8 @@ For more information, visit: https://github.com/DamianSiuta/entropyguard
     setup_logging(
         output_to_stdout=False,
         verbose=verbose_mode,
-        json_logs=getattr(args, 'json_logs', False)
+        json_logs=getattr(args, 'json_logs', False),
+        demo_mode=getattr(args, 'demo', False)
     )
     
     # Execute main logic with global error handling

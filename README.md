@@ -164,6 +164,66 @@ poetry install
 
 ---
 
+## 📋 CLI Flags Reference
+
+Complete reference for all available flags:
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| **Input/Output** |
+| `--input` | string | `-` (stdin) | Path to input file (CSV, JSON, NDJSON). Use `-` for stdin |
+| `--output` | string | `-` (stdout) | Path to output file (NDJSON). Use `-` for stdout |
+| `--text-column` | string | auto-detect | Name of text column to process. Auto-detects first string column if omitted |
+| `--required-columns` | string | None | Comma-separated list of required columns (optional schema validation) |
+| **Processing Options** |
+| `--min-length` | int | `50` | Minimum text length after sanitization (characters) |
+| `--dedup-threshold` | float | `0.95` | Similarity threshold for semantic deduplication (0.0-1.0). Higher = stricter |
+| `--model-name` | string | `all-MiniLM-L6-v2` | Sentence-transformers model for embeddings. Use `paraphrase-multilingual-MiniLM-L12-v2` for multilingual |
+| `--batch-size` | int | `10000` | Batch size for embedding processing. Reduce for low-memory systems |
+| **Chunking (RAG)** |
+| `--chunk-size` | int | None | Chunk size (characters) for splitting long texts. Disabled if not set |
+| `--chunk-overlap` | int | `50` | Overlap size (characters) between consecutive chunks. Only used with `--chunk-size` |
+| `--separators` | list | default | Custom separators for chunking (space-separated). Use `\n` for newline, `\t` for tab |
+| **Checkpoint & Resume** |
+| `--checkpoint-dir` | string | None | Directory to save checkpoints for error recovery |
+| `--resume` | flag | false | Resume from last checkpoint if available. Requires `--checkpoint-dir` |
+| `--no-auto-resume` | flag | false | Disable automatic checkpoint recovery (requires explicit `--resume`) |
+| **Logging & Output** |
+| `--verbose` | flag | false | Enable verbose logging (INFO level) |
+| `--debug` | flag | false | Enable debug mode (DEBUG level + full tracebacks). Implies `--verbose` |
+| `--demo` | flag | false | Demo mode: Hide INFO logs, show only progress bars and final summary |
+| `--quiet` | flag | false | Disable progress bars (useful for CI/CD) |
+| `--json` | flag | false | Output results as JSON (machine-readable format) |
+| `--json-logs` | flag | false | Output logs as JSON (for log aggregation systems) |
+| **Monitoring & Profiling** |
+| `--profile-memory` | flag | false | Enable memory profiling. Tracks usage at each pipeline stage |
+| `--memory-report-path` | string | None | Path to save memory profiling report (JSON). Requires `--profile-memory` |
+| `--metrics-port` | int | None | Start Prometheus metrics HTTP server on specified port |
+| `--audit-log` | string | None | Path to JSON file for audit log of dropped/duplicate rows |
+| **Configuration** |
+| `--config` | string | auto-detect | Path to config file (JSON/YAML/TOML). Auto-detects `.entropyguardrc` in current/home dir |
+| **Utility** |
+| `--dry-run` | flag | false | Simulate processing without expensive operations. Shows statistics only |
+| `--version` | flag | - | Show version number and exit |
+
+### Flag Categories Explained
+
+**Input/Output**: Control where data comes from and goes to. Supports Unix pipes (`-` for stdin/stdout).
+
+**Processing Options**: Core deduplication settings. `--dedup-threshold` controls how similar texts must be to be considered duplicates (0.95 = 95% similarity).
+
+**Chunking (RAG)**: For Retrieval-Augmented Generation workflows. Splits long texts into smaller chunks with configurable overlap.
+
+**Checkpoint & Resume**: Fault tolerance features. Automatically saves progress and can resume from failures.
+
+**Logging & Output**: Control verbosity and output format. `--demo` is perfect for video demonstrations.
+
+**Monitoring & Profiling**: Production observability. Memory profiling helps debug OOM issues, Prometheus metrics enable monitoring.
+
+**Configuration**: Use config files to avoid repeating flags. CLI arguments override config file values.
+
+---
+
 ## 🏢 Enterprise / Advanced Usage
 
 ### Configuration File (`.entropyguardrc.json`)

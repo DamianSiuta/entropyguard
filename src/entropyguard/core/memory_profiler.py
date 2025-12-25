@@ -186,7 +186,7 @@ class MemoryProfiler:
             json.dump(report, f, indent=2)
     
     def print_summary(self) -> None:
-        """Print memory profiling summary to stderr."""
+        """Print compact, readable memory profiling summary to stderr."""
         if not self.enabled or not self.snapshots:
             return
         
@@ -195,29 +195,30 @@ class MemoryProfiler:
         report = self.get_report()
         summary = report["summary"]
         
-        print("\n" + "=" * 60, file=sys.stderr)
-        print("💾 MEMORY PROFILING SUMMARY", file=sys.stderr)
-        print("=" * 60, file=sys.stderr)
-        print(f"Initial Memory:  {summary['initial_memory_mb']:.2f} MB", file=sys.stderr)
-        print(f"Peak Memory:     {summary['peak_memory_mb']:.2f} MB", file=sys.stderr)
-        print(f"Memory Growth:   {summary['memory_growth_mb']:.2f} MB ({summary['memory_growth_percent']:.1f}%)", file=sys.stderr)
-        print("=" * 60, file=sys.stderr)
-        print("\nPer-Stage Memory:", file=sys.stderr)
-        print("-" * 60, file=sys.stderr)
-        print(f"{'Stage':<20} {'Memory (MB)':<15} {'Delta (MB)':<15}", file=sys.stderr)
-        print("-" * 60, file=sys.stderr)
+        print("\n" + "=" * 70, file=sys.stderr)
+        print(" " * 20 + "MEMORY PROFILING SUMMARY", file=sys.stderr)
+        print("=" * 70, file=sys.stderr)
+        print(f"  Initial Memory:  {summary['initial_memory_mb']:.2f} MB", file=sys.stderr)
+        print(f"  Peak Memory:     {summary['peak_memory_mb']:.2f} MB", file=sys.stderr)
+        print(f"  Memory Growth:   {summary['memory_growth_mb']:.2f} MB ({summary['memory_growth_percent']:.1f}%)", file=sys.stderr)
+        print("=" * 70, file=sys.stderr)
+        print("\n  Per-Stage Memory:", file=sys.stderr)
+        print("  " + "-" * 66, file=sys.stderr)
+        print(f"  {'Stage':<25} {'Memory (MB)':<15} {'Delta (MB)':<15}", file=sys.stderr)
+        print("  " + "-" * 66, file=sys.stderr)
         
         prev_memory = summary['initial_memory_mb']
         for snapshot in self.snapshots:
             delta = snapshot.memory_mb - prev_memory
             delta_str = f"{delta:+.2f}" if delta != 0 else "0.00"
             print(
-                f"{snapshot.stage:<20} {snapshot.memory_mb:<15.2f} {delta_str:<15}",
+                f"  {snapshot.stage:<25} {snapshot.memory_mb:<15.2f} {delta_str:<15}",
                 file=sys.stderr
             )
             prev_memory = snapshot.memory_mb
         
-        print("=" * 60, file=sys.stderr)
+        print("  " + "-" * 66, file=sys.stderr)
+        print("=" * 70 + "\n", file=sys.stderr)
     
     def cleanup(self) -> None:
         """Clean up profiler resources."""

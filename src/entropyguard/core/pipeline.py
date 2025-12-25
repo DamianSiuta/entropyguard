@@ -39,6 +39,7 @@ from entropyguard.core.memory_profiler import MemoryProfiler
 from entropyguard.core.checkpoint import CheckpointManager
 from entropyguard.core.logger import get_logger
 from entropyguard.core.retry import retry_file_operation
+from entropyguard.core.progress_tracker import PipelineProgress
 try:
     from entropyguard.core.metrics import (
         pipeline_duration,
@@ -873,6 +874,12 @@ class Pipeline:
                     # Don't fail pipeline on memory report error
                     stats["memory_report_error"] = str(e)
             
+            # Close overall progress bar before summary
+            if config.show_progress and overall_pbar:
+                overall_pbar.n = 100  # Complete
+                overall_pbar.refresh()
+                overall_pbar.close()
+            
             # Print memory summary if profiling enabled
             if self.memory_profiler:
                 self.memory_profiler.print_summary()
@@ -905,6 +912,13 @@ class Pipeline:
                 hint="Run with --verbose for details"
             ) from e
         finally:
+            # Close overall progress bar if still open
+            if 'overall_pbar' in locals() and overall_pbar:
+                try:
+                    overall_pbar.close()
+                except Exception:
+                    pass  # Don't fail on cleanup
+            
             # Exit pipeline timer
             if pipeline_timer:
                 try:

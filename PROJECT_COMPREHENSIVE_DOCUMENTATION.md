@@ -44,32 +44,32 @@
 
 ## 2. Problem: Model Collapse
 
-### 2.1 Czym jest Model Collapse?
+### 2.1 What is Model Collapse?
 
-**Model Collapse** to zjawisko, w którym modele ML stopniowo tracą jakość podczas treningu na danych zawierających:
-- **Duplikaty**: Identyczne lub bardzo podobne przykłady
-- **Niską jakość**: Puste, zanieczyszczone lub nieprawidłowe dane
-- **Bias**: Przesunięcie w kierunku najczęściej występujących wzorców
+**Model Collapse** is a phenomenon where ML models gradually lose quality during training on data containing:
+- **Duplicates**: Identical or very similar examples
+- **Low Quality**: Empty, contaminated, or invalid data
+- **Bias**: Shift towards the most frequently occurring patterns
 
-### 2.2 Dlaczego to Problem?
+### 2.2 Why is this a Problem?
 
-1. **Degradacja Jakości**: Model uczy się zamiast rzeczywistych wzorców, powtarza zduplikowane dane
-2. **Waste of Resources**: Przetwarzanie zduplikowanych danych marnuje czas i zasoby
-3. **Koszty**: W przypadku API (np. OpenAI embeddings), duplikaty generują niepotrzebne koszty
-4. **Compliance**: Zduplikowane dane mogą naruszać zasady GDPR/CCPA
+1. **Quality Degradation**: The model learns to repeat duplicated data instead of real patterns
+2. **Waste of Resources**: Processing duplicated data wastes time and resources
+3. **Costs**: In the case of APIs (e.g., OpenAI embeddings), duplicates generate unnecessary costs
+4. **Compliance**: Duplicated data may violate GDPR/CCPA regulations
 
-### 2.3 Jak EntropyGuard to Rozwiązuje?
+### 2.3 How Does EntropyGuard Solve This?
 
-EntropyGuard implementuje **hybrid deduplication strategy**:
-- **Stage 1**: Szybkie usuwanie dokładnych duplikatów (hash-based)
-- **Stage 2**: Wykrywanie semantycznych duplikatów (AI-based)
-- **Stage 3**: Walidacja i filtrowanie niskiej jakości danych
+EntropyGuard implements a **hybrid deduplication strategy**:
+- **Stage 1**: Fast removal of exact duplicates (hash-based)
+- **Stage 2**: Detection of semantic duplicates (AI-based)
+- **Stage 3**: Validation and filtering of low-quality data
 
 ---
 
-## 3. Architektura Systemu
+## 3. System Architecture
 
-### 3.1 Ogólna Architektura
+### 3.1 Overall Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -98,7 +98,7 @@ EntropyGuard implementuje **hybrid deduplication strategy**:
 └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘
 ```
 
-### 3.2 Struktura Modułów
+### 3.2 Module Structure
 
 ```
 src/entropyguard/
@@ -128,17 +128,17 @@ src/entropyguard/
 
 ### 3.3 Design Principles
 
-1. **Separation of Concerns**: Business logic (`core/`) oddzielona od CLI (`cli/`)
-2. **Lazy Evaluation**: Polars LazyFrame dla efektywności pamięciowej
-3. **Type Safety**: Pełne type hints, TypedDict, dataclasses
-4. **Structured Errors**: Hierarchia wyjątków z kodami błędów
-5. **Testability**: Każdy moduł testowalny niezależnie
+1. **Separation of Concerns**: Business logic (`core/`) separated from CLI (`cli/`)
+2. **Lazy Evaluation**: Polars LazyFrame for memory efficiency
+3. **Type Safety**: Complete type hints, TypedDict, dataclasses
+4. **Structured Errors**: Exception hierarchy with error codes
+5. **Testability**: Each module testable independently
 
 ---
 
-## 4. Szczegółowy Pipeline
+## 4. Detailed Pipeline
 
-### 4.1 Przepływ Danych
+### 4.1 Data Flow
 
 ```
 [Raw Data Input]
@@ -218,23 +218,23 @@ src/entropyguard/
     └─ Generate audit log (optional)
 ```
 
-### 4.2 Szczegóły Każdego Etapu
+### 4.2 Details of Each Stage
 
 #### STEP 1: Ingestion (`ingestion/loader.py`)
 
-**Cel**: Załadowanie danych z różnych formatów do jednolitej reprezentacji Polars LazyFrame.
+**Goal**: Load data from various formats into a unified Polars LazyFrame representation.
 
-**Obsługiwane formaty**:
-- **NDJSON/JSONL**: `pl.scan_ndjson()` - natywne wsparcie Polars
-- **CSV**: `pl.scan_csv()` - z auto-detection separatorów
-- **Parquet**: `pl.scan_parquet()` - efektywny format kolumnowy
-- **Excel**: `pl.read_excel()` → `.lazy()` - wymaga `fastexcel`
-- **JSON**: `pl.read_json()` → `.lazy()` - dla pojedynczych plików JSON
+**Supported Formats**:
+- **NDJSON/JSONL**: `pl.scan_ndjson()` - native Polars support
+- **CSV**: `pl.scan_csv()` - with auto-detection of separators
+- **Parquet**: `pl.scan_parquet()` - efficient columnar format
+- **Excel**: `pl.read_excel()` → `.lazy()` - requires `fastexcel`
+- **JSON**: `pl.read_json()` → `.lazy()` - for single JSON files
 
-**Dlaczego LazyFrame?**
-- **Memory Efficiency**: Nie ładuje całego datasetu do pamięci
-- **Query Optimization**: Polars optymalizuje zapytania przed wykonaniem
-- **Streaming**: Możliwość przetwarzania danych większych niż RAM
+**Why LazyFrame?**
+- **Memory Efficiency**: Does not load the entire dataset into memory
+- **Query Optimization**: Polars optimizes queries before execution
+- **Streaming**: Ability to process data larger than RAM
 
 **Implementacja**:
 ```python
@@ -254,35 +254,35 @@ def load_dataset(input_path: str) -> pl.LazyFrame:
 
 #### STEP 2: Schema Validation
 
-**Cel**: Weryfikacja struktury danych bez materializacji.
+**Goal**: Verify data structure without materialization.
 
-**Operacje**:
-- Sprawdzenie wymaganych kolumn (jeśli `--required-columns` podane)
-- Auto-detection kolumny tekstowej (pierwsza kolumna typu `Utf8`)
-- Wszystko na `lf.schema` (tylko metadane, zero materializacji)
+**Operations**:
+- Check required columns (if `--required-columns` provided)
+- Auto-detect text column (first column of type `Utf8`)
+- Everything on `lf.schema` (metadata only, zero materialization)
 
-**Dlaczego Lazy?**
-- Szybkość: Sprawdzenie schematu to O(1) operacja
-- Memory: Nie ładujemy danych do pamięci
-- Early Validation: Błędy wykrywane przed kosztownym przetwarzaniem
+**Why Lazy?**
+- Speed: Schema checking is an O(1) operation
+- Memory: We don't load data into memory
+- Early Validation: Errors detected before expensive processing
 
 #### STEP 3: Sanitization (`core/sanitization_lazy.py`)
 
-**Cel**: Normalizacja i czyszczenie tekstu.
+**Goal**: Normalize and clean text.
 
-**Operacje Lazy (na LazyFrame)**:
+**Lazy Operations (on LazyFrame)**:
 - `str.to_lowercase()` - lowercase
-- `str.strip_chars()` - usuwanie białych znaków
-- `drop_nulls()` - usuwanie nulli
+- `str.strip_chars()` - remove whitespace
+- `drop_nulls()` - remove nulls
 
-**Operacje Wymagające Materializacji**:
-- **PII Removal**: Wymaga Python functions (regex), więc materializujemy w chunkach
+**Operations Requiring Materialization**:
+- **PII Removal**: Requires Python functions (regex), so we materialize in chunks
 - **Hybrid Approach**: Lazy operations → chunked materialization → lazy again
 
-**Dlaczego Hybrid?**
-- PII removal jest wczesnym etapem (przed kosztownym embedding)
-- Główny OOM risk jest w Stage 2 (embeddings)
-- Chunked materialization pozwala przetwarzać duże pliki bez OOM
+**Why Hybrid?**
+- PII removal is an early stage (before expensive embedding)
+- Main OOM risk is in Stage 2 (embeddings)
+- Chunked materialization allows processing large files without OOM
 
 **Implementacja**:
 ```python
@@ -306,60 +306,60 @@ def sanitize_lazyframe(lf: pl.LazyFrame, config, text_columns):
 
 #### STEP 4: Chunking (`chunking/splitter.py`)
 
-**Cel**: Podział długich tekstów na mniejsze fragmenty (dla RAG).
+**Goal**: Split long texts into smaller fragments (for RAG).
 
-**Kiedy używane?**
-- Tylko jeśli `--chunk-size` jest podane
-- Typowo dla RAG workflows (Retrieval-Augmented Generation)
+**When Used?**
+- Only if `--chunk-size` is provided
+- Typically for RAG workflows (Retrieval-Augmented Generation)
 
-**Strategia**:
-1. **Recursive Splitting**: Próbuje podzielić w kolejności:
+**Strategy**:
+1. **Recursive Splitting**: Attempts to split in order:
    - Paragraph breaks (`\n\n`)
    - Line breaks (`\n`)
    - Word boundaries (` `)
-   - Character-level (dla CJK languages)
+   - Character-level (for CJK languages)
 
-2. **Overlap**: Konfigurowalny overlap między chunkami (domyślnie 50 znaków)
+2. **Overlap**: Configurable overlap between chunks (default 50 characters)
 
-3. **Separators**: Możliwość podania własnych separatorów
+3. **Separators**: Ability to provide custom separators
 
-**Dlaczego Materializacja?**
-- Chunking wymaga Python functions (regex, string manipulation)
-- Ale dzieje się PRZED kosztownym embedding stage
-- Akceptowalne trade-off
+**Why Materialization?**
+- Chunking requires Python functions (regex, string manipulation)
+- But happens BEFORE expensive embedding stage
+- Acceptable trade-off
 
 #### STEP 5: Materialization
 
-**Cel**: Konwersja LazyFrame do DataFrame dla deduplication.
+**Goal**: Convert LazyFrame to DataFrame for deduplication.
 
-**Dlaczego Teraz?**
-- Hash calculation (Stage 1) wymaga dostępu do wartości
-- Polars hash operations są szybkie
-- Główny OOM risk jest w Stage 2 (embeddings), nie tutaj
+**Why Now?**
+- Hash calculation (Stage 1) requires access to values
+- Polars hash operations are fast
+- Main OOM risk is in Stage 2 (embeddings), not here
 
-**Operacje**:
-- `lf.collect()` - materializacja
-- Dodanie `_original_index` kolumny (dla tracking)
-- Sprawdzenie czy dataset nie jest pusty
+**Operations**:
+- `lf.collect()` - materialization
+- Add `_original_index` column (for tracking)
+- Check if dataset is not empty
 
 #### STEP 6: Stage 1 - Exact Deduplication
 
-**Cel**: Szybkie usunięcie dokładnych duplikatów.
+**Goal**: Fast removal of exact duplicates.
 
-**Algorytm**:
-1. Dla każdego tekstu: oblicz `xxhash` (lub MD5 fallback)
-2. Normalizacja przed hashowaniem: lowercase + whitespace normalization
-3. Grupowanie po hash: `rank().over("_text_hash")`
-4. Filtrowanie: `filter(rank == 1)` - zostaw tylko pierwszy
+**Algorithm**:
+1. For each text: calculate `xxhash` (or MD5 fallback)
+2. Normalization before hashing: lowercase + whitespace normalization
+3. Group by hash: `rank().over("_text_hash")`
+4. Filtering: `filter(rank == 1)` - keep only first
 
-**Dlaczego xxhash?**
-- **Szybkość**: xxhash jest ~10x szybszy niż MD5
-- **Non-cryptographic**: Nie potrzebujemy kryptograficznego hash (tylko deduplication)
-- **Deterministic**: Ten sam tekst → ten sam hash
+**Why xxhash?**
+- **Speed**: xxhash is ~10x faster than MD5
+- **Non-cryptographic**: We don't need cryptographic hash (only deduplication)
+- **Deterministic**: Same text → same hash
 
 **Performance**:
-- ~5000-6000 rows/second (na CPU)
-- Memory: O(n) gdzie n = liczba unikalnych hashów
+- ~5000-6000 rows/second (on CPU)
+- Memory: O(n) where n = number of unique hashes
 
 **Implementacja**:
 ```python
@@ -377,33 +377,33 @@ lf_dedup = df.lazy().with_columns(
 
 #### STEP 7: Stage 2 - Semantic Deduplication
 
-**Cel**: Wykrywanie semantycznych duplikatów (różne słowa, podobne znaczenie).
+**Goal**: Detect semantic duplicates (different words, similar meaning).
 
-**Algorytm**:
+**Algorithm**:
 1. **Batched Embeddings**: 
-   - Podziel teksty na batche (domyślnie 10,000)
-   - Dla każdego batcha: wygeneruj embeddings (sentence-transformers)
-   - Dodaj do FAISS index incrementally
+   - Split texts into batches (default 10,000)
+   - For each batch: generate embeddings (sentence-transformers)
+   - Add to FAISS index incrementally
 
 2. **FAISS Index**:
-   - Typ: `IndexFlatL2` (L2 distance)
-   - Dimension: 384 (dla `all-MiniLM-L6-v2`)
-   - Keep index in memory (nie release chunks)
+   - Type: `IndexFlatL2` (L2 distance)
+   - Dimension: 384 (for `all-MiniLM-L6-v2`)
+   - Keep index in memory (don't release chunks)
 
 3. **Duplicate Detection**:
-   - Po dodaniu wszystkich embeddings: `index.find_duplicates(threshold)`
-   - Threshold: `(2.0 * (1.0 - similarity)) ** 0.5` (konwersja cosine → L2)
-   - Dla każdej grupy duplikatów: zostaw pierwszy, usuń resztę
+   - After adding all embeddings: `index.find_duplicates(threshold)`
+   - Threshold: `(2.0 * (1.0 - similarity)) ** 0.5` (cosine → L2 conversion)
+   - For each duplicate group: keep first, remove rest
 
-**Dlaczego Batched?**
-- **Memory Safety**: Nie ładujemy wszystkich embeddings naraz
-- **Scalability**: Możemy przetwarzać miliony wierszy
-- **Performance**: Batch processing jest efektywny dla GPU/CPU
+**Why Batched?**
+- **Memory Safety**: We don't load all embeddings at once
+- **Scalability**: We can process millions of rows
+- **Performance**: Batch processing is efficient for GPU/CPU
 
-**Dlaczego FAISS?**
-- **Speed**: FAISS jest zoptymalizowany do vector search
-- **Memory**: Kompaktowa reprezentacja wektorów
-- **Scalability**: Obsługuje miliony wektorów
+**Why FAISS?**
+- **Speed**: FAISS is optimized for vector search
+- **Memory**: Compact vector representation
+- **Scalability**: Handles millions of vectors
 
 **Model Selection**:
 - **Default**: `all-MiniLM-L6-v2` (384 dim, 22M params, fast)
@@ -431,56 +431,56 @@ duplicate_groups = index.find_duplicates(threshold=distance_threshold)
 
 #### STEP 8: Validation
 
-**Cel**: Finalne quality gates przed zapisem.
+**Goal**: Final quality gates before saving.
 
-**Sprawdzane**:
-- `min_length`: Minimalna długość tekstu (domyślnie 50 znaków)
-- Empty/null texts: Usuwanie pustych wartości
-- Stripped length: Po usunięciu białych znaków
+**Checked**:
+- `min_length`: Minimum text length (default 50 characters)
+- Empty/null texts: Remove empty values
+- Stripped length: After removing whitespace
 
-**Dlaczego Ostatnie?**
-- Sprawdzamy po wszystkich transformacjach
-- Zapewniamy że output jest wysokiej jakości
+**Why Last?**
+- We check after all transformations
+- We ensure output is high quality
 
 #### STEP 9: Output
 
-**Cel**: Zapis przetworzonych danych.
+**Goal**: Save processed data.
 
-**Formaty**:
-- **NDJSON/JSONL**: Jeden JSON object per line
-- **stdout**: Dla Unix pipes (wszystkie logi na stderr)
+**Formats**:
+- **NDJSON/JSONL**: One JSON object per line
+- **stdout**: For Unix pipes (all logs to stderr)
 
-**Audit Log** (opcjonalny):
-- JSON file z każdym usuniętym wierszem
-- Powód usunięcia (exact_duplicate, semantic_duplicate, validation)
-- Original index dla traceability
+**Audit Log** (optional):
+- JSON file with each removed row
+- Removal reason (exact_duplicate, semantic_duplicate, validation)
+- Original index for traceability
 
 ---
 
-## 5. Komponenty i Moduły
+## 5. Components and Modules
 
 ### 5.1 Core Module (`core/`)
 
 #### `pipeline.py` - Main Orchestration
 
-**Klasa**: `Pipeline`
+**Class**: `Pipeline`
 
-**Odpowiedzialność**:
-- Koordynacja wszystkich etapów pipeline
-- Zarządzanie komponentami (validator, chunker, embedder, index)
-- Error handling z structured exceptions
+**Responsibilities**:
+- Coordinate all pipeline stages
+- Manage components (validator, chunker, embedder, index)
+- Error handling with structured exceptions
 - Progress tracking (tqdm)
 - Memory profiling integration
 
-**Kluczowe Metody**:
-- `__init__(model_name)`: Inicjalizacja komponentów
-- `run(config: PipelineConfig) -> PipelineResult`: Główna metoda wykonania
+**Key Methods**:
+- `__init__(model_name)`: Initialize components
+- `run(config: PipelineConfig) -> PipelineResult`: Main execution method
 
 **Design Decisions**:
-- **Separation**: Business logic oddzielona od CLI
-- **Config Object**: Typed `PipelineConfig` dataclass zamiast dict
-- **Result Object**: Typed `PipelineResult` TypedDict dla type safety
-- **Exception Hierarchy**: Structured errors zamiast generic exceptions
+- **Separation**: Business logic separated from CLI
+- **Config Object**: Typed `PipelineConfig` dataclass instead of dict
+- **Result Object**: Typed `PipelineResult` TypedDict for type safety
+- **Exception Hierarchy**: Structured errors instead of generic exceptions
 
 #### `errors.py` - Exception Hierarchy
 
@@ -492,125 +492,125 @@ PipelineError (base)
 └── ProcessingError (code=1)    # Embedding, FAISS failures
 ```
 
-**Dlaczego Hierarchia?**
-- **Structured Handling**: CLI może obsłużyć różne typy błędów inaczej
-- **Exit Codes**: Różne kody wyjścia dla różnych błędów
-- **User-Friendly**: Konkretne komunikaty błędów z hints
+**Why Hierarchy?**
+- **Structured Handling**: CLI can handle different error types differently
+- **Exit Codes**: Different exit codes for different errors
+- **User-Friendly**: Specific error messages with hints
 
-**Atrybuty**:
-- `message`: Główny komunikat błędu
+**Attributes**:
+- `message`: Main error message
 - `code`: Exit code (1, 2, 3)
-- `category`: Kategoria błędu (validation, resource, processing)
-- `hint`: Opcjonalna wskazówka dla użytkownika
+- `category`: Error category (validation, resource, processing)
+- `hint`: Optional hint for the user
 
 #### `types.py` - Type Definitions
 
-**Typy**:
-- `PipelineStats` (TypedDict): Statystyki pipeline (rows, duplicates, etc.)
-- `PipelineResult` (TypedDict): Wynik pipeline (success, stats, output_path)
-- `PipelineConfig` (dataclass): Konfiguracja pipeline
+**Types**:
+- `PipelineStats` (TypedDict): Pipeline statistics (rows, duplicates, etc.)
+- `PipelineResult` (TypedDict): Pipeline result (success, stats, output_path)
+- `PipelineConfig` (dataclass): Pipeline configuration
 
-**Dlaczego TypedDict + dataclass?**
-- **Type Safety**: MyPy może sprawdzić typy
-- **Runtime Validation**: Pydantic może walidować (future)
-- **IDE Support**: Autocomplete i type hints
+**Why TypedDict + dataclass?**
+- **Type Safety**: MyPy can check types
+- **Runtime Validation**: Pydantic can validate (future)
+- **IDE Support**: Autocomplete and type hints
 
 #### `config_loader.py` - Configuration Management
 
-**Funkcje**:
-- `load_config_file(path)`: Ładowanie z JSON/YAML/TOML
+**Functions**:
+- `load_config_file(path)`: Load from JSON/YAML/TOML
 - `merge_config_with_args(config, args)`: Merge config file + CLI args
 
 **Auto-Detection**:
-- Szuka `.entropyguardrc.json/yaml/toml` w:
+- Searches for `.entropyguardrc.json/yaml/toml` in:
   - Current directory
   - Home directory
 
 **Priority**:
-1. CLI arguments (najwyższy priorytet)
+1. CLI arguments (highest priority)
 2. Config file
 3. Defaults
 
-**Dlaczego Config Files?**
-- **Convenience**: Nie trzeba powtarzać argumentów
-- **Team Consistency**: Wspólna konfiguracja w repo
-- **CI/CD**: Łatwiejsza automatyzacja
+**Why Config Files?**
+- **Convenience**: Don't need to repeat arguments
+- **Team Consistency**: Shared configuration in repo
+- **CI/CD**: Easier automation
 
 #### `memory_profiler.py` - Memory Tracking
 
 **Klasa**: `MemoryProfiler`
 
-**Funkcje**:
-- `snapshot(stage)`: Wykonanie snapshot pamięci na etapie
-- `get_report() -> dict`: Generowanie raportu
-- `save_report_json(path)`: Zapis do JSON
-- `print_summary()`: Wyświetlenie podsumowania
+**Functions**:
+- `snapshot(stage)`: Take memory snapshot at stage
+- `get_report() -> dict`: Generate report
+- `save_report_json(path)`: Save to JSON
+- `print_summary()`: Display summary
 
 **Backend Options**:
-- **psutil** (preferred): Dokładne monitorowanie procesu
-- **tracemalloc** (fallback): Built-in Python, mniej dokładny
+- **psutil** (preferred): Accurate process monitoring
+- **tracemalloc** (fallback): Built-in Python, less accurate
 
-**Użycie**:
-- `--profile-memory`: Włącza profiling
-- `--memory-report-path`: Ścieżka do zapisu raportu
+**Usage**:
+- `--profile-memory`: Enable profiling
+- `--memory-report-path`: Path to save report
 
-**Dlaczego Memory Profiling?**
-- **Debugging OOM**: Identyfikacja etapów z wysokim użyciem pamięci
-- **Optimization**: Znajdowanie bottlenecków pamięciowych
-- **Capacity Planning**: Planowanie zasobów dla dużych datasetów
+**Why Memory Profiling?**
+- **Debugging OOM**: Identify stages with high memory usage
+- **Optimization**: Find memory bottlenecks
+- **Capacity Planning**: Plan resources for large datasets
 
 #### `sanitization_lazy.py` - Lazy Sanitization
 
-**Funkcja**: `sanitize_lazyframe(lf, config, text_columns) -> LazyFrame`
+**Function**: `sanitize_lazyframe(lf, config, text_columns) -> LazyFrame`
 
-**Operacje**:
+**Operations**:
 - Lazy: lowercase, strip, drop_nulls
 - Hybrid: PII removal (chunked materialization)
 
-**Dlaczego Lazy?**
-- **Memory Efficiency**: Nie materializujemy całego datasetu
-- **Performance**: Polars optymalizuje operacje
-- **Scalability**: Możemy przetwarzać dane > RAM
+**Why Lazy?**
+- **Memory Efficiency**: We don't materialize the entire dataset
+- **Performance**: Polars optimizes operations
+- **Scalability**: We can process data > RAM
 
 ### 5.2 Ingestion Module (`ingestion/`)
 
 #### `loader.py` - Universal Data Loader
 
-**Funkcja**: `load_dataset(input_path) -> LazyFrame`
+**Function**: `load_dataset(input_path) -> LazyFrame`
 
-**Obsługiwane Formaty**:
+**Supported Formats**:
 - **NDJSON/JSONL**: `pl.scan_ndjson()` - streaming support
-- **CSV**: `pl.scan_csv()` - auto-detection separatorów
+- **CSV**: `pl.scan_csv()` - auto-detection of separators
 - **Parquet**: `pl.scan_parquet()` - columnar format
-- **Excel**: `pl.read_excel()` → `.lazy()` - wymaga fastexcel
+- **Excel**: `pl.read_excel()` → `.lazy()` - requires fastexcel
 - **JSON**: `pl.read_json()` → `.lazy()` - single JSON file
 
 **Auto-Detection**:
-- Na podstawie file extension
-- Fallback: próba wszystkich formatów
+- Based on file extension
+- Fallback: try all formats
 
 **Error Handling**:
-- `FileNotFoundError`: Plik nie istnieje
-- `ValueError`: Nieobsługiwany format lub corrupted file
+- `FileNotFoundError`: File does not exist
+- `ValueError`: Unsupported format or corrupted file
 
 ### 5.3 Sanitization Module (`sanitization/`)
 
 #### `core.py` - PII Removal & Text Cleaning
 
-**Funkcje**:
-- `remove_pii(text)`: Usuwanie emails, phones, IDs (regex-based)
-- `remove_html_tags(text)`: Usuwanie HTML tags
-- `normalize_text(text)`: Normalizacja whitespace
+**Functions**:
+- `remove_pii(text)`: Remove emails, phones, IDs (regex-based)
+- `remove_html_tags(text)`: Remove HTML tags
+- `normalize_text(text)`: Normalize whitespace
 
 **PII Patterns**:
 - Email: `[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}`
-- Phone: Różne formaty (US, EU, etc.)
-- SSN/ID: Konfigurowalne wzorce
+- Phone: Various formats (US, EU, etc.)
+- SSN/ID: Configurable patterns
 
-**Dlaczego Regex?**
-- **Speed**: Regex jest szybki dla prostych wzorców
-- **No Dependencies**: Nie wymaga zewnętrznych bibliotek
-- **Configurable**: Łatwo dodać nowe wzorce
+**Why Regex?**
+- **Speed**: Regex is fast for simple patterns
+- **No Dependencies**: Doesn't require external libraries
+- **Configurable**: Easy to add new patterns
 
 ### 5.4 Chunking Module (`chunking/`)
 
@@ -618,16 +618,16 @@ PipelineError (base)
 
 **Klasa**: `Chunker`
 
-**Strategia**:
-1. **Recursive Splitting**: Próbuje podzielić w kolejności separatorów
-2. **Overlap**: Konfigurowalny overlap między chunkami
-3. **Fallback**: Character-level dla CJK languages
+**Strategy**:
+1. **Recursive Splitting**: Attempts to split in separator order
+2. **Overlap**: Configurable overlap between chunks
+3. **Fallback**: Character-level for CJK languages
 
 **Separators Hierarchy**:
 - Default: `["\n\n", "\n", " ", ""]` (paragraph → line → word → char)
 - Custom: `--separators` flag
 
-**Użycie**:
+**Usage**:
 - RAG workflows (Retrieval-Augmented Generation)
 - Long document processing
 - Context window limitations
@@ -640,18 +640,18 @@ PipelineError (base)
 
 **Backend**: `sentence-transformers`
 
-**Funkcje**:
-- `embed(texts: list[str]) -> np.ndarray`: Generowanie embeddings
-- Batch processing dla efektywności
+**Functions**:
+- `embed(texts: list[str]) -> np.ndarray`: Generate embeddings
+- Batch processing for efficiency
 
 **Model Selection**:
 - Default: `all-MiniLM-L6-v2` (384 dim, fast, English)
 - Multilingual: `paraphrase-multilingual-MiniLM-L12-v2` (384 dim, slower)
 
-**Dlaczego sentence-transformers?**
-- **State-of-the-art**: Najlepsze modele dla sentence embeddings
-- **Easy Integration**: Prosty API
-- **Model Hub**: Dostęp do wielu pre-trained models
+**Why sentence-transformers?**
+- **State-of-the-art**: Best models for sentence embeddings
+- **Easy Integration**: Simple API
+- **Model Hub**: Access to many pre-trained models
 
 #### `index.py` - FAISS Vector Index
 
@@ -661,19 +661,19 @@ PipelineError (base)
 
 **Typ Indexu**: `IndexFlatL2` (L2 distance)
 
-**Funkcje**:
-- `add_vectors(embeddings)`: Dodawanie wektorów do indexu
-- `find_duplicates(threshold) -> list[list[int]]`: Znajdowanie duplikatów
+**Functions**:
+- `add_vectors(embeddings)`: Add vectors to index
+- `find_duplicates(threshold) -> list[list[int]]`: Find duplicates
 
-**Algorytm Duplicate Detection**:
-1. Dla każdego wektora: znajdź najbliższych sąsiadów (L2 distance)
-2. Jeśli distance < threshold: to duplikat
-3. Grupowanie: connected components (jeśli A podobny do B i B podobny do C, to A, B, C są w jednej grupie)
+**Duplicate Detection Algorithm**:
+1. For each vector: find nearest neighbors (L2 distance)
+2. If distance < threshold: it's a duplicate
+3. Grouping: connected components (if A similar to B and B similar to C, then A, B, C are in one group)
 
-**Dlaczego FAISS?**
-- **Speed**: Zoptymalizowany do vector search
-- **Memory**: Kompaktowa reprezentacja
-- **Scalability**: Obsługuje miliony wektorów
+**Why FAISS?**
+- **Speed**: Optimized for vector search
+- **Memory**: Compact representation
+- **Scalability**: Handles millions of vectors
 
 ### 5.6 Validation Module (`validation/`)
 
@@ -681,10 +681,10 @@ PipelineError (base)
 
 **Klasa**: `DataValidator`
 
-**Funkcje**:
+**Functions**:
 - `validate_data(df, text_column, min_text_length) -> ValidationResult`
-- Sprawdzanie `min_length`
-- Usuwanie empty/null texts
+- Check `min_length`
+- Remove empty/null texts
 
 **Result Object**:
 - `success: bool`
@@ -696,109 +696,109 @@ PipelineError (base)
 
 ## 6. Hybrid Deduplication Engine
 
-### 6.1 Dlaczego Hybrid?
+### 6.1 Why Hybrid?
 
-**Problem**: Semantyczna deduplication jest kosztowna (embeddings + vector search).
+**Problem**: Semantic deduplication is expensive (embeddings + vector search).
 
-**Rozwiązanie**: Dwuetapowa strategia:
-1. **Stage 1 (Fast)**: Usuń dokładne duplikaty (hash-based, ~5000 rows/sec)
-2. **Stage 2 (Smart)**: Usuń semantyczne duplikaty (AI-based, tylko na survivors)
+**Solution**: Two-stage strategy:
+1. **Stage 1 (Fast)**: Remove exact duplicates (hash-based, ~5000 rows/sec)
+2. **Stage 2 (Smart)**: Remove semantic duplicates (AI-based, only on survivors)
 
-**Korzyści**:
-- **Performance**: Stage 1 usuwa 50-80% duplikatów szybko
-- **Cost Savings**: Mniej embeddings do wygenerowania
-- **Accuracy**: Stage 2 znajduje duplikaty, które Stage 1 przegapił
+**Benefits**:
+- **Performance**: Stage 1 removes 50-80% of duplicates quickly
+- **Cost Savings**: Fewer embeddings to generate
+- **Accuracy**: Stage 2 finds duplicates that Stage 1 missed
 
 ### 6.2 Stage 1: Exact Deduplication
 
-**Algorytm**:
-1. Normalizacja tekstu (lowercase + whitespace)
-2. Hash calculation (xxhash lub MD5)
-3. Grupowanie po hash
-4. Zostaw pierwszy, usuń resztę
+**Algorithm**:
+1. Text normalization (lowercase + whitespace)
+2. Hash calculation (xxhash or MD5)
+3. Group by hash
+4. Keep first, remove rest
 
 **Performance**:
 - ~5000-6000 rows/second
-- Memory: O(n) gdzie n = unikalne hashe
+- Memory: O(n) where n = unique hashes
 - CPU-only, zero GPU
 
-**Przykład**:
+**Example**:
 ```
 Text 1: "Hello World"
 Text 2: "hello world"  (lowercase)
 Text 3: "Hello  World"  (extra spaces)
 
-Po normalizacji: wszystkie → "hello world"
-Hash: wszystkie → same hash
-Result: Zostaje tylko Text 1
+After normalization: all → "hello world"
+Hash: all → same hash
+Result: Only Text 1 remains
 ```
 
 ### 6.3 Stage 2: Semantic Deduplication
 
-**Algorytm**:
-1. Batch processing (domyślnie 10,000 rows/batch)
+**Algorithm**:
+1. Batch processing (default 10,000 rows/batch)
 2. Embedding generation (sentence-transformers)
 3. FAISS index (L2 distance)
 4. Duplicate detection (threshold-based)
-5. Filtering (zostaw pierwszy w każdej grupie)
+5. Filtering (keep first in each group)
 
 **Performance**:
-- ~500-1000 rows/second (zależy od modelu)
-- Memory: O(n * d) gdzie n = liczba wektorów, d = dimension (384)
-- CPU-only (może użyć GPU jeśli dostępne)
+- ~500-1000 rows/second (depends on model)
+- Memory: O(n * d) where n = number of vectors, d = dimension (384)
+- CPU-only (can use GPU if available)
 
-**Przykład**:
+**Example**:
 ```
 Text 1: "What is the weather today?"
 Text 2: "How's the weather?"
 Text 3: "Tell me about today's weather"
 
-Wszystkie mają podobne znaczenie
-Embeddings: Wszystkie blisko siebie w przestrzeni wektorowej
-Result: Zostaje tylko Text 1
+All have similar meaning
+Embeddings: All close together in vector space
+Result: Only Text 1 remains
 ```
 
 ### 6.4 Threshold Configuration
 
 **Default**: `--dedup-threshold 0.95` (95% similarity)
 
-**Interpretacja**:
-- `0.95`: Bardzo podobne (stricter, mniej duplikatów)
-- `0.85`: Umiarkowanie podobne (looser, więcej duplikatów)
-- `0.99`: Prawie identyczne (very strict)
+**Interpretation**:
+- `0.95`: Very similar (stricter, fewer duplicates)
+- `0.85`: Moderately similar (looser, more duplicates)
+- `0.99`: Almost identical (very strict)
 
-**Konwersja**:
+**Conversion**:
 - Cosine similarity → L2 distance: `distance = sqrt(2 * (1 - similarity))`
-- Przykład: similarity=0.95 → distance ≈ 0.316
+- Example: similarity=0.95 → distance ≈ 0.316
 
 ---
 
-## 7. Memory Management i Optymalizacje
+## 7. Memory Management and Optimizations
 
 ### 7.1 Lazy Evaluation Strategy
 
 **Polars LazyFrame**:
-- **Query Planning**: Polars planuje zapytania przed wykonaniem
-- **Optimization**: Automatyczne optymalizacje (predicate pushdown, projection)
-- **Materialization**: Dane materializowane tylko gdy potrzebne
+- **Query Planning**: Polars plans queries before execution
+- **Optimization**: Automatic optimizations (predicate pushdown, projection)
+- **Materialization**: Data materialized only when needed
 
-**Kiedy Materializujemy?**
-1. **Chunking**: Wymaga Python functions (regex)
-2. **Stage 1 Deduplication**: Hash calculation wymaga wartości
-3. **Stage 2 Deduplication**: Embeddings wymagają wartości
+**When Do We Materialize?**
+1. **Chunking**: Requires Python functions (regex)
+2. **Stage 1 Deduplication**: Hash calculation requires values
+3. **Stage 2 Deduplication**: Embeddings require values
 
-**Kiedy NIE Materializujemy?**
-1. **Schema Validation**: Tylko metadane (`lf.schema`)
-2. **Lazy Sanitization**: Operacje na LazyFrame (lowercase, strip)
-3. **Filtering**: Polars może filtrować lazy
+**When Do We NOT Materialize?**
+1. **Schema Validation**: Only metadata (`lf.schema`)
+2. **Lazy Sanitization**: Operations on LazyFrame (lowercase, strip)
+3. **Filtering**: Polars can filter lazy
 
 ### 7.2 Batched Embeddings
 
-**Problem**: Embedding całego datasetu naraz → OOM dla dużych plików.
+**Problem**: Embedding entire dataset at once → OOM for large files.
 
-**Rozwiązanie**: Batch processing.
+**Solution**: Batch processing.
 
-**Algorytm**:
+**Algorithm**:
 ```python
 batch_size = 10000  # Configurable via --batch-size
 
@@ -810,47 +810,47 @@ for batch_idx in range(0, len(texts), batch_size):
     del batch_texts
 ```
 
-**Korzyści**:
-- **Memory Safety**: Tylko jeden batch w pamięci naraz
-- **Scalability**: Możemy przetwarzać miliony wierszy
-- **Configurable**: `--batch-size` dla różnych systemów
+**Benefits**:
+- **Memory Safety**: Only one batch in memory at a time
+- **Scalability**: We can process millions of rows
+- **Configurable**: `--batch-size` for different systems
 
-**Rekomendacje**:
+**Recommendations**:
 - **Low-memory (4-8GB)**: `--batch-size 1000`
 - **Medium (16GB)**: `--batch-size 10000` (default)
 - **High-memory (32GB+)**: `--batch-size 50000`
 
 ### 7.3 FAISS Index Management
 
-**Strategia**: Keep index in memory, nie release chunks.
+**Strategy**: Keep index in memory, don't release chunks.
 
-**Dlaczego?**
-- FAISS index jest kompaktowy (tylko wektory, nie teksty)
-- Potrzebujemy całego indexu do duplicate detection
-- Release chunks przed detection → błąd (brak wektorów)
+**Why?**
+- FAISS index is compact (only vectors, not texts)
+- We need the entire index for duplicate detection
+- Releasing chunks before detection → error (missing vectors)
 
 **Memory Usage**:
 - FAISS index: ~n * d * 4 bytes (float32)
-- Przykład: 1M wektorów × 384 dim × 4 bytes = ~1.5 GB
+- Example: 1M vectors × 384 dim × 4 bytes = ~1.5 GB
 
 **Optimization**:
-- Używamy `IndexFlatL2` (najprostszy, najszybszy)
-- Można użyć `IndexIVFFlat` dla większych datasetów (future)
+- We use `IndexFlatL2` (simplest, fastest)
+- Can use `IndexIVFFlat` for larger datasets (future)
 
 ### 7.4 STDIN Handling
 
-**Problem**: Polars nie może czytać bezpośrednio z `sys.stdin`.
+**Problem**: Polars cannot read directly from `sys.stdin`.
 
-**Rozwiązanie**: Temporary file.
+**Solution**: Temporary file.
 
-**Algorytm**:
-1. Stream stdin do temporary file (chunked, 64KB chunks)
-2. Użyj `pl.scan_ndjson(temp_file)` dla lazy loading
-3. Cleanup temp file po zakończeniu
+**Algorithm**:
+1. Stream stdin to temporary file (chunked, 64KB chunks)
+2. Use `pl.scan_ndjson(temp_file)` for lazy loading
+3. Cleanup temp file after completion
 
-**Dlaczego Chunked?**
-- Unikamy załadowania całego stdin do RAM
-- 64KB chunks są efektywne dla I/O
+**Why Chunked?**
+- We avoid loading entire stdin into RAM
+- 64KB chunks are efficient for I/O
 
 **Implementacja**:
 ```python
@@ -871,20 +871,20 @@ def read_stdin_as_tempfile() -> str:
 **Narzędzie**: `MemoryProfiler` class
 
 **Backend Options**:
-- **psutil** (preferred): Dokładne monitorowanie procesu
+- **psutil** (preferred): Accurate process monitoring
 - **tracemalloc** (fallback): Built-in Python
 
 **Snapshots**:
-- Wykonywane na każdym etapie pipeline
+- Taken at each pipeline stage
 - Tracking: peak memory, average memory, growth
 
-**Użycie**:
+**Usage**:
 ```bash
 entropyguard --input data.jsonl --output clean.jsonl \
   --profile-memory --memory-report-path report.json
 ```
 
-**Raport**:
+**Report**:
 ```json
 {
   "initial_memory_mb": 125.30,
@@ -915,8 +915,8 @@ entropyguard --input data.jsonl --output clean.jsonl \
 
 ### 8.2 Signal Handling
 
-**Obsługiwane Signale**:
-- `SIGINT` (Ctrl+C): Graceful exit z kodem 130
+**Supported Signals**:
+- `SIGINT` (Ctrl+C): Graceful exit with code 130
 - `SIGTERM` (Docker/K8s): Graceful exit
 
 **Implementacja**:
@@ -927,7 +927,7 @@ def signal_handler(sig, frame):
     sys.exit(130)
 ```
 
-**Dlaczego Graceful?**
+**Why Graceful?**
 - Cleanup temporary files
 - User-friendly message
 - Standard exit code (130 = SIGINT)
@@ -940,9 +940,9 @@ def signal_handler(sig, frame):
 - `ProcessingError` (code=1): Embedding, FAISS failures
 
 **Error Messages**:
-- User-friendly: "❌ Error: ..." zamiast traceback
-- Hints: Opcjonalne wskazówki jak naprawić
-- Verbose mode: `--verbose` pokazuje pełny traceback
+- User-friendly: "❌ Error: ..." instead of traceback
+- Hints: Optional hints on how to fix
+- Verbose mode: `--verbose` shows full traceback
 
 **JSON Output**:
 - `--json` flag: Machine-readable error output
@@ -957,28 +957,28 @@ def signal_handler(sig, frame):
 - Stage 2: Semantic deduplication (batches)
 
 **Redirect**:
-- Wszystkie progress bars na `stderr`
-- `stdout` pozostaje czysty dla JSONL output
+- All progress bars to `stderr`
+- `stdout` remains clean for JSONL output
 
 **Quiet Mode**:
-- `--quiet` flag: Wyłącza progress bars
-- Przydatne dla non-interactive environments (CI/CD)
+- `--quiet` flag: Disables progress bars
+- Useful for non-interactive environments (CI/CD)
 
 ### 8.5 Output Modes
 
 **Human-Readable** (default):
-- Summary table na `stderr`
+- Summary table to `stderr`
 - Metrics: rows, duplicates, tokens saved, storage saved
 
 **JSON Output** (`--json`):
 - Machine-readable format
-- Przydatne dla CI/CD i automatyzacji
+- Useful for CI/CD and automation
 - Format: `{"success": true, "stats": {...}, "output_path": "..."}`
 
 **Stdout Mode** (`--output -`):
-- Wszystkie logi na `stderr`
-- Tylko JSONL data na `stdout`
-- Idealne dla Unix pipes
+- All logs to `stderr`
+- Only JSONL data to `stdout`
+- Ideal for Unix pipes
 
 ---
 
@@ -1023,7 +1023,7 @@ PipelineError (base)
    Hint: [Optional hint]
 ```
 
-**Przykłady**:
+**Examples**:
 ```
 ❌ Validation Error: Missing required columns: 'text'
    Hint: Available columns: 'id', 'content', 'metadata'
@@ -1045,7 +1045,7 @@ PipelineError (base)
 }
 ```
 
-**Użycie**:
+**Usage**:
 - CI/CD pipelines
 - Automation scripts
 - Error monitoring systems
@@ -1090,7 +1090,7 @@ PipelineError (base)
 2. **Config File**
 3. **Defaults**
 
-**Przykład**:
+**Example**:
 ```bash
 # Config file: dedup_threshold=0.95
 # CLI: --dedup-threshold 0.85
@@ -1099,7 +1099,7 @@ PipelineError (base)
 
 ### 10.4 Config Merging
 
-**Algorytm**:
+**Algorithm**:
 1. Load config file (if exists)
 2. Parse CLI arguments
 3. Merge: CLI args override config file values
@@ -1109,7 +1109,7 @@ PipelineError (base)
 
 ---
 
-## 11. Performance i Benchmarking
+## 11. Performance and Benchmarking
 
 ### 11.1 Performance Metrics
 
@@ -1143,11 +1143,11 @@ python scripts/benchmark.py --size 10K --output results.csv
 
 **Stage 1 (Exact Deduplication)**:
 - ~5000-6000 rows/second
-- Memory: O(n) gdzie n = unikalne hashe
+- Memory: O(n) where n = unique hashes
 
 **Stage 2 (Semantic Deduplication)**:
-- ~500-1000 rows/second (zależy od modelu)
-- Memory: O(n * d) gdzie n = wektory, d = dimension (384)
+- ~500-1000 rows/second (depends on model)
+- Memory: O(n * d) where n = vectors, d = dimension (384)
 
 **Overall**:
 - 1K rows: ~2-3 seconds
@@ -1228,7 +1228,7 @@ pytest tests/test_core_pipeline_v1_20.py -v
 
 ---
 
-## 13. Deployment i Distribution
+## 13. Deployment and Distribution
 
 ### 13.1 Installation Methods
 
@@ -1289,7 +1289,7 @@ docker run -v $(pwd)/data:/data entropyguard \
 
 ---
 
-## 14. Roadmap i Wersjonowanie
+## 14. Roadmap and Versioning
 
 ### 14.1 Version History
 
@@ -1353,49 +1353,49 @@ docker run -v $(pwd)/data:/data entropyguard \
 
 ---
 
-## 15. Podsumowanie
+## 15. Summary
 
-### 15.1 Kluczowe Cechy
+### 15.1 Key Features
 
-1. **Hybrid Deduplication**: Dwuetapowa strategia (hash + AI)
-2. **Lazy Evaluation**: Polars LazyFrame dla memory efficiency
+1. **Hybrid Deduplication**: Two-stage strategy (hash + AI)
+2. **Lazy Evaluation**: Polars LazyFrame for memory efficiency
 3. **Batched Processing**: Scalable embedding generation
 4. **Structured Errors**: Production-grade error handling
 5. **Memory Profiling**: Debugging OOM issues
-6. **Config Files**: Convenience dla teams
-7. **Unix Pipes**: Integration z existing workflows
+6. **Config Files**: Convenience for teams
+7. **Unix Pipes**: Integration with existing workflows
 8. **Type Safety**: Full type hints, TypedDict, dataclasses
 
 ### 15.2 Design Decisions
 
-**Dlaczego Polars?**
+**Why Polars?**
 - Lazy evaluation
 - High performance
 - Memory efficiency
 - Modern API
 
-**Dlaczego FAISS?**
+**Why FAISS?**
 - Fast vector search
 - Scalable
 - Industry standard
 
-**Dlaczego sentence-transformers?**
+**Why sentence-transformers?**
 - State-of-the-art models
 - Easy integration
 - Model hub access
 
-**Dlaczego Hybrid Deduplication?**
-- Performance: Stage 1 usuwa 50-80% szybko
-- Accuracy: Stage 2 znajduje semantyczne duplikaty
-- Cost: Mniej embeddings = mniej kosztów
+**Why Hybrid Deduplication?**
+- Performance: Stage 1 removes 50-80% quickly
+- Accuracy: Stage 2 finds semantic duplicates
+- Cost: Fewer embeddings = lower costs
 
 ### 15.3 Use Cases
 
-1. **LLM Training Data Preparation**: Clean datasets przed treningiem
-2. **RAG Pipeline**: Chunking + deduplication dla retrieval
-3. **Data Quality**: Validation i sanitization
-4. **Compliance**: Audit logs dla GDPR/CCPA
-5. **Cost Optimization**: Redukcja duplikatów = mniej API calls
+1. **LLM Training Data Preparation**: Clean datasets before training
+2. **RAG Pipeline**: Chunking + deduplication for retrieval
+3. **Data Quality**: Validation and sanitization
+4. **Compliance**: Audit logs for GDPR/CCPA
+5. **Cost Optimization**: Duplicate reduction = fewer API calls
 
 ---
 

@@ -15,6 +15,8 @@ except ImportError:
     class Counter:
         def __init__(self, *args, **kwargs):
             pass
+        def labels(self, **kwargs):
+            return self
         def inc(self, *args, **kwargs):
             pass
         def time(self):
@@ -27,6 +29,8 @@ except ImportError:
     class Histogram:
         def __init__(self, *args, **kwargs):
             pass
+        def labels(self, **kwargs):
+            return self
         def time(self):
             return self
         def __enter__(self):
