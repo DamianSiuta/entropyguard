@@ -1,4 +1,4 @@
-# 🛡️ EntropyGuard v1.22.0
+# 🛡️ EntropyGuard v1.22.1
 
 <div align="center">
 
