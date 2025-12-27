@@ -143,3 +143,5 @@ def test_memory_profiler_summary_calculation():
     assert summary["total_snapshots"] == len(profiler.snapshots)
 
 
+
+

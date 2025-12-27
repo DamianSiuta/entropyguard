@@ -341,3 +341,5 @@ class TestCLIIntegration:
                 Path(audit_log_path).unlink()
 
 
+
+
