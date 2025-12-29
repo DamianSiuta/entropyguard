@@ -47,11 +47,17 @@ Unix pipe:
 cat data.jsonl | entropyguard --dedup-threshold 0.95 > clean.jsonl
 ```
 
-Checkpoint/resume (for large datasets):
+With audit log (for compliance):
 ```bash
-entropyguard --input large.jsonl --output clean.jsonl --checkpoint-dir ./checkpoints
-# If it crashes, resume:
-entropyguard --input large.jsonl --output clean.jsonl --checkpoint-dir ./checkpoints --resume
+entropyguard --input data.jsonl --output clean.jsonl --text-column text --audit-log audit.json
+```
+
+Checkpoint/resume (for large datasets) - available via config file (see Configuration File section):
+```json
+{
+  "checkpoint_dir": "./checkpoints",
+  "resume": true
+}
 ```
 
 ## Benchmarks
@@ -91,14 +97,20 @@ Essential flags:
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--input` | stdin | Input file path (or `-` for stdin) |
-| `--output` | stdout | Output file path (or `-` for stdout) |
+| `--input` | *required* | Input file path (or `-` for stdin) |
+| `--output` | *required* | Output file path (or `-` for stdout) |
 | `--text-column` | auto-detect | Column name containing text |
 | `--dedup-threshold` | 0.95 | Similarity threshold (0.0-1.0, higher = stricter) |
 | `--min-length` | 50 | Minimum text length after sanitization |
-| `--batch-size` | 10000 | Embedding batch size (reduce if OOM) |
-| `--checkpoint-dir` | None | Directory for checkpoint files |
-| `--resume` | false | Resume from last checkpoint |
+| `--model-name` | all-MiniLM-L6-v2 | Sentence-transformers model for embeddings |
+| `--required-columns` | None | Comma-separated list of required columns (schema validation) |
+| `--audit-log` | None | Path to JSON file for audit log of dropped/duplicate rows |
+| `--chunk-size` | None | Chunk size (characters) for splitting long texts before embedding |
+| `--chunk-overlap` | 50 | Overlap size (characters) between consecutive chunks |
+| `--separators` | None | Custom separators for text chunking (space-separated list) |
+| `--profile-memory` | false | Enable memory profiling during processing |
+
+**Note:** `--batch-size` and checkpoint-related flags (`--checkpoint-dir`, `--resume`) are available via configuration file only. See Configuration File section below.
 
 Full flag reference: `entropyguard --help`
 
@@ -111,11 +123,14 @@ Create `.entropyguardrc.json` in your project root:
   "text_column": "text",
   "min_length": 100,
   "dedup_threshold": 0.95,
-  "batch_size": 10000
+  "batch_size": 10000,
+  "checkpoint_dir": "./checkpoints",
+  "resume": false,
+  "auto_resume": true
 }
 ```
 
-CLI flags override config file values.
+CLI flags override config file values. Some options (like `batch_size`, `checkpoint_dir`, `resume`) are only available via configuration file.
 
 ## Exit Codes
 
@@ -138,4 +153,4 @@ MIT License. See [LICENSE](LICENSE) file.
 
 - **GitHub**: https://github.com/DamianSiuta/entropyguard
 - **PyPI**: https://pypi.org/project/entropyguard/
-- **Documentation**: See [PROJECT_COMPREHENSIVE_DOCUMENTATION.md](./PROJECT_COMPREHENSIVE_DOCUMENTATION.md)
+- **Documentation**: See [ARCHITECTURE.md](./ARCHITECTURE.md)
