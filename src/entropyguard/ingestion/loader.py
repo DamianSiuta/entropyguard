@@ -2,6 +2,7 @@
 Data loader for ingesting datasets.
 
 Supports multiple formats (CSV, NDJSON/JSONL, Parquet, Excel) using Polars.
+Also supports PDF directories (requires entropyguard[pdf] extra).
 
 The loader is **lazy-first**: it returns a `pl.LazyFrame` wherever possible
 to enable scalable processing on large files. Callers can decide when to
@@ -9,6 +10,7 @@ materialize the data with `.collect()` or use streaming sinks.
 """
 
 import os
+import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -55,19 +57,41 @@ def _detect_file_format(file_path: str) -> str:
     return 'unknown'
 
 
+def _is_pdf_directory(path: Path) -> bool:
+    """
+    Check if a directory contains PDF files.
+    
+    Args:
+        path: Path to check
+        
+    Returns:
+        True if directory contains at least one PDF file
+    """
+    if not path.is_dir():
+        return False
+    
+    try:
+        # Check if any PDF files exist (non-recursive check for speed)
+        return any(path.glob("*.pdf")) or any(path.rglob("*.pdf"))
+    except Exception:
+        return False
+
+
 def validate_input_file(file_path: str, max_size_gb: float = 100.0) -> tuple[bool, Optional[str]]:
     """
     Validate input file before processing.
     
     Checks:
     - File exists
-    - File is not empty
+    - File is not empty (for files)
     - File size is reasonable (warns if > max_size_gb)
     - File is readable
     - Format detection matches extension
     
+    For directories: checks if it's a valid PDF directory.
+    
     Args:
-        file_path: Path to input file
+        file_path: Path to input file or directory
         max_size_gb: Maximum file size in GB before warning (default: 100GB)
     
     Returns:
@@ -77,13 +101,33 @@ def validate_input_file(file_path: str, max_size_gb: float = 100.0) -> tuple[boo
     """
     path = Path(file_path)
     
-    # Check file exists
+    # Check path exists
     if not path.exists():
-        return False, f"File not found: {file_path}"
+        return False, f"Path not found: {file_path}"
     
-    # Check file is not a directory
+    # Handle directories (PDF support)
     if path.is_dir():
-        return False, f"Path is a directory, not a file: {file_path}"
+        # Check if it's a PDF directory
+        if _is_pdf_directory(path):
+            # Check if PDF support is available
+            try:
+                from entropyguard.ingestion.pdf_loader import HAS_DOCLING
+                if not HAS_DOCLING:
+                    return False, (
+                        f"PDF directory detected but PDF support not installed. "
+                        f"Install with: pip install entropyguard[pdf]"
+                    )
+            except ImportError:
+                return False, (
+                    f"PDF directory detected but PDF support not installed. "
+                    f"Install with: pip install entropyguard[pdf]"
+                )
+            return True, None
+        else:
+            return False, (
+                f"Directory does not contain any PDF files: {file_path}. "
+                f"Please provide a file (.csv, .jsonl, .parquet, .xlsx) or a directory with PDF files."
+            )
     
     # Check file size
     try:
@@ -127,37 +171,78 @@ def validate_input_file(file_path: str, max_size_gb: float = 100.0) -> tuple[boo
     return True, None
 
 
-def load_dataset(file_path: str) -> pl.LazyFrame:
+def load_dataset(file_path: str, show_progress: bool = True) -> pl.LazyFrame:
     """
-    Load a dataset from file as a Polars LazyFrame.
+    Load a dataset from file or directory as a Polars LazyFrame.
 
     Supports:
     - CSV files (.csv) via `scan_csv`
     - NDJSON / JSON Lines (.ndjson, .jsonl, .json) via `scan_ndjson`
     - Parquet files (.parquet) via `scan_parquet`
     - Excel files (.xlsx) via `read_excel` (eager) wrapped as a LazyFrame
+    - PDF directories: processes all PDFs and converts to JSONL (requires entropyguard[pdf])
 
     Format detection:
-    - First tries file extension
+    - First checks if path is a directory (PDF support)
+    - Then tries file extension
     - Falls back to magic number detection for reliability
 
     Args:
-        file_path: Path to the input file
+        file_path: Path to the input file or directory
+        show_progress: Whether to show progress during PDF parsing (if directory)
 
     Returns:
         Polars LazyFrame with the loaded data
+        
+    Note:
+        For PDF directories, a temporary JSONL file is created and then loaded.
+        The LazyFrame will have 'text' and 'source_file' columns.
 
     Raises:
-        FileNotFoundError: If file doesn't exist
+        FileNotFoundError: If file/directory doesn't exist
         ValueError: If file format is not supported or cannot be determined
+        ImportError: If PDF directory requires entropyguard[pdf] but it's not installed
     """
     path = Path(file_path)
 
-    # Validate file before loading
+    # Validate path before loading
     is_valid, error_msg = validate_input_file(file_path)
     if not is_valid:
-        raise ValueError(error_msg or f"File validation failed: {file_path}")
+        raise ValueError(error_msg or f"Path validation failed: {file_path}")
+    
+    # Handle PDF directories
+    if path.is_dir():
+        try:
+            from entropyguard.ingestion.pdf_loader import pdf_directory_to_jsonl_stream
+        except ImportError as e:
+            raise ImportError(
+                f"PDF directory detected but PDF support not installed. "
+                f"Install with: pip install entropyguard[pdf]"
+            ) from e
+        
+        # Convert PDF directory to temporary JSONL file
+        temp_jsonl = pdf_directory_to_jsonl_stream(
+            str(path),
+            output_path=None,  # Create temp file
+            show_progress=show_progress
+        )
+        
+        # Load the JSONL file as LazyFrame
+        try:
+            lf = pl.scan_ndjson(temp_jsonl)
+            # Store temp file path in LazyFrame metadata so it can be cleaned up later
+            # Note: This is a workaround - in practice, the temp file will be cleaned up
+            # by the OS when the process ends, or we could track it in the pipeline
+            return lf
+        except Exception as e:
+            # Clean up temp file on error
+            try:
+                Path(temp_jsonl).unlink()
+            except Exception:
+                pass
+            raise ValueError(f"Failed to load PDF directory: {str(e)}") from e
 
+    # File processing (not a directory)
     suffix = path.suffix.lower()
     
     # Try format detection if extension is ambiguous

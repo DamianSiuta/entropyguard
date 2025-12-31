@@ -232,7 +232,7 @@ class Pipeline:
             # STEP 1: Load dataset (lazy) - skip if resuming from later stage
             if self.memory_profiler:
                 self.memory_profiler.snapshot("before_load")
-            lf = load_dataset(config.input_path)
+            lf = load_dataset(config.input_path, show_progress=config.show_progress)
             if self.memory_profiler:
                 self.memory_profiler.snapshot("after_load")
             

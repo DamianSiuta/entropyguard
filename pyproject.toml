@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "entropyguard"
-version = "1.22.3"
+version = "1.23.0"
 description = "Enterprise-grade semantic data deduplication and sanitization engine."
 authors = ["EntropyGuard Team"]
 readme = "README.md"
@@ -27,6 +27,9 @@ ruff = "^0.1.6"
 mypy = "^1.7.0"
 mkdocs = "^1.5.0"
 mkdocs-material = "^9.4.0"
+
+[tool.poetry.extras]
+pdf = ["docling"]
 
 [tool.poetry.scripts]
 entropyguard = "entropyguard.cli:main"

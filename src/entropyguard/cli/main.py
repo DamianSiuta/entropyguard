@@ -52,7 +52,7 @@ Examples:
         "--input",
         required=True,
         type=str,
-        help="Path to input data file (CSV, JSON, or NDJSON format). Use '-' for stdin",
+        help="Path to input data file (CSV, JSON, NDJSON, Parquet, Excel) or directory (PDF files). Use '-' for stdin",
     )
 
     parser.add_argument(
@@ -174,10 +174,38 @@ Examples:
             print(f"Error reading from stdin: {e}", file=sys.stderr)
             return 1
     else:
-        # Validate input file exists (only if not stdin)
-        if not Path(input_path).exists():
-            print(f"Error: Input file not found: {input_path}", file=sys.stderr)
+        # Validate input file/directory exists (only if not stdin)
+        input_path_obj = Path(input_path)
+        if not input_path_obj.exists():
+            print(f"Error: Input path not found: {input_path}", file=sys.stderr)
             return 1
+        
+        # Check if it's a PDF directory and validate
+        if input_path_obj.is_dir():
+            try:
+                from entropyguard.ingestion.pdf_loader import find_pdf_files, HAS_DOCLING
+                pdf_files = list(find_pdf_files(input_path))
+                if not pdf_files:
+                    print(
+                        f"Error: Directory does not contain any PDF files: {input_path}",
+                        file=sys.stderr
+                    )
+                    return 1
+                if not HAS_DOCLING:
+                    print(
+                        f"Error: PDF directory detected but PDF support not installed.\n"
+                        f"Install with: pip install entropyguard[pdf]",
+                        file=sys.stderr
+                    )
+                    return 1
+                print(f"   Found {len(pdf_files)} PDF file(s) in directory", file=sys.stderr)
+            except ImportError:
+                print(
+                    f"Error: PDF directory detected but PDF support not installed.\n"
+                    f"Install with: pip install entropyguard[pdf]",
+                    file=sys.stderr
+                )
+                return 1
     
     # If output is stdout, use a temporary file and write to stdout at the end
     use_stdout = output_path == "-"
@@ -244,7 +272,7 @@ Examples:
         from entropyguard.ingestion import load_dataset
 
         try:
-            lf = load_dataset(input_path)
+            lf = load_dataset(input_path, show_progress=False)  # Disable progress for auto-detection
             # Inspect a small materialized sample to infer schema / string columns
             df_head = lf.head(100).collect()
             string_cols = [

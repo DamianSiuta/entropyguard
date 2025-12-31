@@ -28,6 +28,11 @@ Uses Polars LazyFrame so you can process datasets larger than RAM. Everything ru
 pip install entropyguard
 ```
 
+For PDF support (optional):
+```bash
+pip install entropyguard[pdf]
+```
+
 Requires Python 3.10, 3.11, or 3.12. Python 3.13 not supported (missing FAISS wheels).
 
 ## Usage
@@ -50,6 +55,11 @@ cat data.jsonl | entropyguard --dedup-threshold 0.95 > clean.jsonl
 With audit log (for compliance):
 ```bash
 entropyguard --input data.jsonl --output clean.jsonl --text-column text --audit-log audit.json
+```
+
+PDF directory (requires `entropyguard[pdf]`):
+```bash
+entropyguard --input ./my_pdfs_folder --output clean.jsonl --text-column text
 ```
 
 Checkpoint/resume (for large datasets) - available via config file (see Configuration File section):
@@ -80,8 +90,26 @@ For comparison, a naive Pandas approach on the same 65K dataset:
 - **Resumable**: Checkpoint system for fault tolerance
 - **Pipe-friendly**: Works with stdin/stdout
 - **Memory-safe**: Chunked processing, handles datasets > RAM
-- **Format support**: JSONL, CSV, Parquet, Excel
+- **Format support**: JSONL, CSV, Parquet, Excel, PDF directories (optional)
 - **Exit codes**: sysexits.h compliant (0=success, 1=error, 2=usage error, etc.)
+
+## PDF Support (Optional)
+
+EntropyGuard can process PDF directories directly when installed with the `pdf` extra:
+
+```bash
+pip install entropyguard[pdf]
+entropyguard --input ./pdf_folder --output clean.jsonl
+```
+
+**Features:**
+- Recursively scans directories for PDF files
+- Converts PDFs to Markdown (preserves table structure via IBM's docling)
+- Memory-safe: processes PDFs one at a time using generators
+- Includes source filename metadata (`source_file` column)
+- Graceful error handling: skips corrupted PDFs and continues processing
+
+**Output format:** PDF directories are converted to JSONL with `text` and `source_file` columns. The `text` column contains the extracted Markdown content.
 
 ## Known Limitations
 
@@ -90,6 +118,7 @@ For comparison, a naive Pandas approach on the same 65K dataset:
 - **Slower than hash-only**: Semantic dedup is ~10x slower than pure hash dedup. Trade-off for accuracy.
 - **CPU-only**: No GPU acceleration (yet). Uses PyTorch CPU backend.
 - **FAISS IndexFlatL2**: O(n²) duplicate detection. For 10M+ rows, consider approximate search (not implemented).
+- **PDF support**: Requires optional `pdf` extra and IBM's docling library
 
 ## CLI Flags
 
@@ -97,9 +126,9 @@ Essential flags:
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--input` | *required* | Input file path (or `-` for stdin) |
+| `--input` | *required* | Input file path (CSV, JSONL, Parquet, Excel) or directory (PDF files). Use `-` for stdin |
 | `--output` | *required* | Output file path (or `-` for stdout) |
-| `--text-column` | auto-detect | Column name containing text |
+| `--text-column` | auto-detect | Column name containing text (defaults to 'text' for PDF directories) |
 | `--dedup-threshold` | 0.95 | Similarity threshold (0.0-1.0, higher = stricter) |
 | `--min-length` | 50 | Minimum text length after sanitization |
 | `--model-name` | all-MiniLM-L6-v2 | Sentence-transformers model for embeddings |
