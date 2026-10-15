@@ -1,0 +1,146 @@
+{
+  "dataset": "Quora Question Pairs",
+  "pairs": 404276,
+  "positive_pairs": 149263,
+  "methods": {
+    "hash": [
+      {
+        "threshold": 1.0,
+        "precision": 0.8684,
+        "recall": 0.0002,
+        "f1": 0.0004,
+        "predicted_positive": 38,
+        "tp": 33,
+        "fp": 5,
+        "fn": 149230
+      }
+    ],
+    "minhash": [
+      {
+        "threshold": 0.5,
+        "precision": 0.5211,
+        "recall": 0.2381,
+        "f1": 0.3268,
+        "predicted_positive": 68189,
+        "tp": 35534,
+        "fp": 32655,
+        "fn": 113729
+      },
+      {
+        "threshold": 0.6,
+        "precision": 0.4909,
+        "recall": 0.1471,
+        "f1": 0.2264,
+        "predicted_positive": 44740,
+        "tp": 21962,
+        "fp": 22778,
+        "fn": 127301
+      },
+      {
+        "threshold": 0.7,
+        "precision": 0.4589,
+        "recall": 0.0835,
+        "f1": 0.1413,
+        "predicted_positive": 27156,
+        "tp": 12463,
+        "fp": 14693,
+        "fn": 136800
+      },
+      {
+        "threshold": 0.8,
+        "precision": 0.4568,
+        "recall": 0.0356,
+        "f1": 0.0661,
+        "predicted_positive": 11645,
+        "tp": 5320,
+        "fp": 6325,
+        "fn": 143943
+      },
+      {
+        "threshold": 0.9,
+        "precision": 0.6271,
+        "recall": 0.0073,
+        "f1": 0.0145,
+        "predicted_positive": 1743,
+        "tp": 1093,
+        "fp": 650,
+        "fn": 148170
+      }
+    ],
+    "semantic": [
+      {
+        "threshold": 0.8,
+        "precision": 0.6805,
+        "recall": 0.7661,
+        "f1": 0.7208,
+        "predicted_positive": 168031,
+        "tp": 114347,
+        "fp": 53684,
+        "fn": 34916
+      },
+      {
+        "threshold": 0.85,
+        "precision": 0.7307,
+        "recall": 0.6157,
+        "f1": 0.6683,
+        "predicted_positive": 125775,
+        "tp": 91900,
+        "fp": 33875,
+        "fn": 57363
+      },
+      {
+        "threshold": 0.9,
+        "precision": 0.7909,
+        "recall": 0.4256,
+        "f1": 0.5534,
+        "predicted_positive": 80324,
+        "tp": 63525,
+        "fp": 16799,
+        "fn": 85738
+      },
+      {
+        "threshold": 0.92,
+        "precision": 0.8182,
+        "recall": 0.3385,
+        "f1": 0.4789,
+        "predicted_positive": 61759,
+        "tp": 50530,
+        "fp": 11229,
+        "fn": 98733
+      },
+      {
+        "threshold": 0.95,
+        "precision": 0.8651,
+        "recall": 0.208,
+        "f1": 0.3353,
+        "predicted_positive": 35884,
+        "tp": 31044,
+        "fp": 4840,
+        "fn": 118219
+      },
+      {
+        "threshold": 0.97,
+        "precision": 0.8993,
+        "recall": 0.1227,
+        "f1": 0.216,
+        "predicted_positive": 20372,
+        "tp": 18320,
+        "fp": 2052,
+        "fn": 130943
+      }
+    ]
+  },
+  "timings_seconds": {
+    "hash": 0.02,
+    "minhash": 117.98,
+    "embedding": 935.29
+  },
+  "unique_questions_embedded": 537133,
+  "environment": {
+    "python": "3.12.15",
+    "machine": "x86_64",
+    "processor": "x86_64",
+    "cpu_count": 4,
+    "model": "all-MiniLM-L6-v2"
+  }
+}
