@@ -436,3 +436,7 @@ build-enterprise/
 enterprise_metrics/
 commercial_analytics/
 production_logs/
+
+# Benchmark results are versioned (the global *.json rule above would hide them)
+!benchmarks/results/
+!benchmarks/results/*.json
