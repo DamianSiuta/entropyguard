@@ -45,6 +45,11 @@ jobs:
       - name: Scaling 10k / 100k / 1M rows
         run: python benchmarks/scale_bench.py --data data/qqp.tsv --sizes 10000 100000 1000000 --out benchmarks/results/scale.json
 
+      - name: HNSW vs flat on the same 100k rows
+        run: |
+          python benchmarks/scale_bench.py --data data/qqp.tsv --sizes 100000 --index flat --out benchmarks/results/scale_100k_flat.json
+          python benchmarks/scale_bench.py --data data/qqp.tsv --sizes 100000 --index hnsw --out benchmarks/results/scale_100k_hnsw.json
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
