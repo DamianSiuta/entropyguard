@@ -61,12 +61,8 @@ def load_config_file(config_path: Optional[str] = None) -> dict[str, Any]:
     
     for config_file in search_paths:
         if config_file.exists():
-            try:
-                config = _load_config_from_file(config_file)
-                return config
-            except Exception as e:
-                # If one config file fails, try next one
-                continue
+            # A broken config file is an error, not something to skip silently.
+            return _load_config_from_file(config_file)
     
     # No config file found - return empty dict
     return config
@@ -129,8 +125,13 @@ def _load_yaml_config(config_file: Path) -> dict[str, Any]:
 def _load_toml_config(config_file: Path) -> dict[str, Any]:
     """Load TOML configuration file."""
     try:
-        import tomli
+        import tomllib as tomli  # Python >= 3.11
     except ImportError:
+        try:
+            import tomli  # type: ignore[no-redef]
+        except ImportError:
+            tomli = None  # type: ignore[assignment]
+    if tomli is None:
         raise ValueError(
             "TOML config files require 'tomli' package (Python <3.11) or built-in 'tomllib' (Python >=3.11). "
             "Install it with: pip install tomli"
@@ -182,6 +183,11 @@ def merge_config_with_args(
         "separators": "chunk_separators",  # CLI uses separators, config uses chunk_separators
         "dry_run": "dry_run",
         "quiet": "show_progress",  # CLI uses quiet, config uses show_progress (inverted)
+        "index_type": "index_type",
+        "redact_pii": "redact_pii",
+        "checkpoint_dir": "checkpoint_dir",
+        "resume": "resume",
+        "profile_memory": "profile_memory",
     }
     
     # Merge args into config (args override config)

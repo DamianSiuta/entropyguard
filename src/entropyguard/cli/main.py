@@ -1,457 +1,203 @@
 """
 Command-line interface for EntropyGuard.
 
-Provides CLI tools for data sanitization workflows.
+Settings are resolved in this order (later wins): built-in defaults,
+.entropyguardrc.{json,yaml,yml,toml} (or the file given with --config), CLI flags.
 """
 
+from __future__ import annotations
+
 import argparse
-import os
+import shutil
 import sys
+import tempfile
+from dataclasses import fields
 from pathlib import Path
+from typing import Any, Optional
 
 import polars as pl
 
-# Fix Windows console encoding for emojis
-if sys.platform == "win32":
-    os.system("chcp 65001 >nul 2>&1")
-    if hasattr(sys.stdout, 'reconfigure'):
-        sys.stdout.reconfigure(encoding='utf-8')
-    if hasattr(sys.stderr, 'reconfigure'):
-        sys.stderr.reconfigure(encoding='utf-8')
-
+from entropyguard.core.config_loader import load_config_file, merge_config_with_args
+from entropyguard.core.config_validator import validate_config
+from entropyguard.core.errors import PipelineError
+from entropyguard.core.logger import setup_logging
 from entropyguard.core.pipeline import Pipeline
 from entropyguard.core.types import PipelineConfig
 
-
-def main() -> int:
-    """
-    Main entry point for EntropyGuard CLI.
-
-    Returns:
-        Exit code (0 for success, 1 for failure)
-    """
-    parser = argparse.ArgumentParser(
-        description="EntropyGuard - AI Data Sanitation Infrastructure",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
+EPILOG = """
 Examples:
-  # Basic usage
-  entropyguard --input data.ndjson --output cleaned.ndjson --text-column text
+  entropyguard --input data.jsonl --output clean.jsonl --text-column text
+  entropyguard --input data.jsonl --output clean.jsonl --dedup-threshold 0.9 --audit-log audit.json
+  cat data.jsonl | entropyguard --text-column text > clean.jsonl
 
-  # With custom settings
-  entropyguard --input data.ndjson --output cleaned.ndjson --text-column text \\
-    --min-length 100 --dedup-threshold 0.9
+Exit codes: 0 success, 1 processing error, 2 invalid input/arguments,
+3 not enough memory, 130 interrupted.
+"""
 
-  # With schema validation
-  entropyguard --input data.ndjson --output cleaned.ndjson --text-column text \\
-    --required-columns text,id,date
-        """,
+
+def build_parser() -> argparse.ArgumentParser:
+    # Every option defaults to None so that values from the config file are only
+    # overridden by flags the user actually passed.
+    p = argparse.ArgumentParser(
+        prog="entropyguard",
+        description="Remove exact and semantic (near-)duplicate rows from a text dataset.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=EPILOG,
     )
+    p.add_argument("--input", default="-",
+                   help="Input file (CSV, JSON/NDJSON/JSONL, Parquet, XLSX) or PDF directory. "
+                        "'-' or omitted: read NDJSON from stdin.")
+    p.add_argument("--output", default="-",
+                   help="Output NDJSON file. '-' or omitted: write to stdout.")
+    p.add_argument("--config", default=None,
+                   help="Config file (.json/.yaml/.toml). Default: .entropyguardrc.* in the "
+                        "current directory, then in the home directory.")
+    p.add_argument("--text-column", default=None,
+                   help="Column with the text. Default: the string column with the longest "
+                        "average length in the first 100 rows.")
+    p.add_argument("--required-columns", default=None,
+                   help="Comma-separated columns that must exist in the input.")
+    p.add_argument("--min-length", type=int, default=None,
+                   help="Drop rows whose stripped text is shorter than this (default: 50).")
+    p.add_argument("--dedup-threshold", type=float, default=None,
+                   help="Cosine similarity (0-1) at or above which a row is a semantic "
+                        "duplicate of an earlier row (default: 0.95).")
+    p.add_argument("--model-name", default=None,
+                   help="sentence-transformers model (default: all-MiniLM-L6-v2).")
+    p.add_argument("--index", dest="index_type", choices=["auto", "flat", "hnsw"], default=None,
+                   help="Similarity index: flat = exact, hnsw = approximate and faster on "
+                        "large inputs, auto = hnsw above 100k rows (default: auto).")
+    p.add_argument("--batch-size", type=int, default=None,
+                   help="Rows embedded per batch (default: 10000).")
+    p.add_argument("--audit-log", default=None,
+                   help="Write a JSON list with one entry per removed row.")
+    p.add_argument("--redact-pii", action="store_true", default=None,
+                   help="Replace e-mails, phone numbers, SSNs and card numbers in the output "
+                        "text with placeholders. Off by default.")
+    p.add_argument("--chunk-size", type=int, default=None,
+                   help="Split texts into chunks of at most this many characters before "
+                        "deduplication. Off by default.")
+    p.add_argument("--chunk-overlap", type=int, default=None,
+                   help="Characters of overlap between chunks (default: 50).")
+    p.add_argument("--separators", nargs="+", default=None,
+                   help="Chunk separators, e.g. '\\n\\n' '\\n' ' '.")
+    p.add_argument("--checkpoint-dir", default=None,
+                   help="Save checkpoints here and resume from them after a failure.")
+    p.add_argument("--resume", action="store_true", default=None,
+                   help="Resume from --checkpoint-dir (resuming is automatic by default).")
+    p.add_argument("--dry-run", action="store_true", default=None,
+                   help="Run everything (including --audit-log) but do not write the output.")
+    p.add_argument("--profile-memory", action="store_true", default=None,
+                   help="Print a memory usage report.")
+    p.add_argument("--quiet", action="store_true", default=None,
+                   help="No progress bars and no summary.")
+    return p
 
-    parser.add_argument(
-        "--input",
-        required=True,
-        type=str,
-        help="Path to input data file (CSV, JSON, NDJSON, Parquet, Excel) or directory (PDF files). Use '-' for stdin",
-    )
 
-    parser.add_argument(
-        "--output",
-        required=True,
-        type=str,
-        help="Path to output data file (NDJSON format). Use '-' for stdout",
-    )
+def detect_text_column(input_path: str) -> str:
+    """Pick the string column with the longest average length in the first 100 rows."""
+    from entropyguard.ingestion import load_dataset
 
-    parser.add_argument(
-        "--text-column",
-        required=False,
-        type=str,
-        help=(
-            "Name of the text column to process. "
-            "If omitted, EntropyGuard will auto-detect a string column."
-        ),
-    )
+    head = load_dataset(input_path, show_progress=False).head(100).collect()
+    string_cols = [c for c in head.columns if head[c].dtype == pl.Utf8]
+    if not string_cols:
+        raise ValueError("no string columns found")
+    return max(string_cols, key=lambda c: head[c].str.len_chars().mean() or 0.0)
 
-    parser.add_argument(
-        "--required-columns",
-        type=str,
-        default=None,
-        help="Comma-separated list of required columns (optional schema validation)",
-    )
 
-    parser.add_argument(
-        "--min-length",
-        type=int,
-        default=50,
-        help="Minimum text length after sanitization (default: 50)",
-    )
+def print_summary(stats: dict[str, Any], output: str) -> None:
+    def line(label: str, key: str) -> None:
+        if key in stats and stats[key] is not None:
+            print(f"  {label:<28}{stats[key]:>12,}", file=sys.stderr)
 
-    parser.add_argument(
-        "--dedup-threshold",
-        type=float,
-        default=0.95,
-        help="Similarity threshold for deduplication (0.0-1.0, default: 0.95). "
-        "Higher values = stricter (fewer duplicates found).",
-    )
+    print("Summary:", file=sys.stderr)
+    line("Input rows", "original_rows")
+    line("Rows after chunking", "after_chunking_rows")
+    line("Dropped by validation", "validation_dropped")
+    line("Exact duplicates removed", "exact_duplicates_removed")
+    line("Semantic duplicates removed", "semantic_duplicates_removed")
+    line("Output rows", "final_rows")
+    if stats.get("index_type"):
+        print(f"  {'Similarity index':<28}{stats['index_type']:>12}", file=sys.stderr)
+    if stats.get("dry_run"):
+        print("Dry run: output not written.", file=sys.stderr)
+    elif output != "-":
+        print(f"Output written to {output}", file=sys.stderr)
 
-    parser.add_argument(
-        "--model-name",
-        type=str,
-        default="all-MiniLM-L6-v2",
-        help=(
-            "Sentence-transformers model to use for semantic embeddings. "
-            "Default: 'all-MiniLM-L6-v2'. For multilingual use cases, you can set "
-            "e.g. 'paraphrase-multilingual-MiniLM-L12-v2'."
-        ),
-    )
 
-    parser.add_argument(
-        "--audit-log",
-        type=str,
-        default=None,
-        help=(
-            "Optional path to a JSON file where an audit log of dropped/duplicate rows "
-            "will be written. Helps with compliance and data lineage."
-        ),
-    )
+def resolve_settings(args: argparse.Namespace) -> dict[str, Any]:
+    """Merge defaults, config file and CLI flags into PipelineConfig keyword arguments."""
+    file_config = load_config_file(args.config)
+    cli = vars(args).copy()
+    if cli.get("required_columns"):
+        cli["required_columns"] = [c.strip() for c in cli["required_columns"].split(",") if c.strip()]
+    if cli.get("separators"):
+        from entropyguard.chunking.splitter import Chunker
 
-    parser.add_argument(
-        "--chunk-size",
-        type=int,
-        default=None,
-        help=(
-            "Optional chunk size (characters) for splitting long texts before embedding. "
-            "If not provided, chunking is disabled. Recommended: 512 for RAG workflows."
-        ),
-    )
+        cli["separators"] = [Chunker.decode_separator(s) for s in cli["separators"]]
+    merged = merge_config_with_args(file_config, cli)
 
-    parser.add_argument(
-        "--chunk-overlap",
-        type=int,
-        default=50,
-        help=(
-            "Overlap size (characters) between consecutive chunks. "
-            "Only used if --chunk-size is set. Default: 50."
-        ),
-    )
+    defaults = {f.name: f.default for f in fields(PipelineConfig) if f.name not in
+                ("input_path", "output_path", "text_column")}
+    settings = {**defaults, **merged}
+    return settings
 
-    parser.add_argument(
-        "--separators",
-        type=str,
-        nargs="+",
-        default=None,
-        help=(
-            "Custom separators for text chunking (space-separated list). "
-            "Use escape sequences like '\\n' for newline, '\\t' for tab. "
-            "Example: --separators '|' '\\n'. "
-            "If not provided, uses default: paragraph breaks, newlines, spaces, characters."
-        ),
-    )
 
-    parser.add_argument(
-        "--profile-memory",
-        action="store_true",
-        help="Enable memory profiling during processing",
-    )
+def main(argv: Optional[list[str]] = None) -> int:
+    """CLI entry point. Returns the process exit code."""
+    args = build_parser().parse_args(argv)
+    setup_logging(demo_mode=True)
 
-    args = parser.parse_args()
-
-    # Handle stdin/stdout
-    input_path = args.input
-    output_path = args.output
-    
-    # If input is stdin, create a temporary file
-    if input_path == "-":
-        import tempfile
-        temp_input = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.jsonl', encoding='utf-8')
-        print("Reading from stdin...", file=sys.stderr)
+    tmp_dir = Path(tempfile.mkdtemp(prefix="entropyguard-"))
+    try:
         try:
-            for line in sys.stdin:
-                temp_input.write(line)
-            temp_input.close()
-            input_path = temp_input.name
-        except Exception as e:
-            print(f"Error reading from stdin: {e}", file=sys.stderr)
-            return 1
-    else:
-        # Validate input file/directory exists (only if not stdin)
-        input_path_obj = Path(input_path)
-        if not input_path_obj.exists():
-            print(f"Error: Input path not found: {input_path}", file=sys.stderr)
-            return 1
-        
-        # Check if it's a PDF directory and validate
-        if input_path_obj.is_dir():
+            settings = resolve_settings(args)
+        except (ValueError, OSError) as e:
+            print(f"Error: invalid configuration: {e}", file=sys.stderr)
+            return 2
+
+        input_path = args.input
+        if input_path == "-":
+            input_path = str(tmp_dir / "stdin.jsonl")
+            with open(input_path, "w", encoding="utf-8") as f:
+                shutil.copyfileobj(sys.stdin, f)
+        output_path = str(tmp_dir / "stdout.jsonl") if args.output == "-" else args.output
+
+        text_column = settings.pop("text_column", None)
+        if not text_column:
             try:
-                from entropyguard.ingestion.pdf_loader import find_pdf_files, HAS_DOCLING
-                pdf_files = list(find_pdf_files(input_path))
-                if not pdf_files:
-                    print(
-                        f"Error: Directory does not contain any PDF files: {input_path}",
-                        file=sys.stderr
-                    )
-                    return 1
-                if not HAS_DOCLING:
-                    print(
-                        f"Error: PDF directory detected but PDF support not installed.\n"
-                        f"Install with: pip install entropyguard[pdf]",
-                        file=sys.stderr
-                    )
-                    return 1
-                print(f"   Found {len(pdf_files)} PDF file(s) in directory", file=sys.stderr)
-            except ImportError:
-                print(
-                    f"Error: PDF directory detected but PDF support not installed.\n"
-                    f"Install with: pip install entropyguard[pdf]",
-                    file=sys.stderr
-                )
-                return 1
-    
-    # If output is stdout, use a temporary file and write to stdout at the end
-    use_stdout = output_path == "-"
-    if use_stdout:
-        import tempfile
-        temp_output = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.jsonl', encoding='utf-8')
-        temp_output.close()
-        output_path = temp_output.name
+                text_column = detect_text_column(input_path)
+            except (ValueError, FileNotFoundError) as e:
+                print(f"Error: cannot auto-detect the text column: {e}", file=sys.stderr)
+                return 2
+            print(f"Auto-detected text column: '{text_column}'", file=sys.stderr)
 
-    # Parse required columns if provided
-    required_columns = None
-    if args.required_columns:
-        required_columns = [col.strip() for col in args.required_columns.split(",")]
+        settings.update(input_path=input_path, output_path=output_path, text_column=text_column)
+        valid, error, _ = validate_config(settings)
+        if not valid:
+            print(f"Error: invalid configuration: {error}", file=sys.stderr)
+            return 2
+        config = PipelineConfig(**settings)
 
-    # Validate dedup threshold
-    if not 0.0 <= args.dedup_threshold <= 1.0:
-        print(
-            f"Error: dedup-threshold must be between 0.0 and 1.0, got {args.dedup_threshold}",
-            file=sys.stderr,
-        )
-        return 1
+        result = Pipeline(model_name=config.model_name).run(config)
 
-    # Validate min length
-    if args.min_length < 0:
-        print(
-            f"Error: min-length must be >= 0, got {args.min_length}",
-            file=sys.stderr,
-        )
-        return 1
-
-    # Validate chunking parameters
-    chunk_separators = None
-    if args.chunk_size is not None:
-        if args.chunk_size <= 0:
-            print(
-                f"Error: chunk-size must be > 0, got {args.chunk_size}",
-                file=sys.stderr,
-            )
-            return 1
-        if args.chunk_overlap < 0:
-            print(
-                f"Error: chunk-overlap must be >= 0, got {args.chunk_overlap}",
-                file=sys.stderr,
-            )
-            return 1
-        if args.chunk_overlap >= args.chunk_size:
-            print(
-                f"Error: chunk-overlap ({args.chunk_overlap}) must be < chunk-size ({args.chunk_size})",
-                file=sys.stderr,
-            )
-            return 1
-
-        # Decode custom separators if provided
-        if args.separators:
-            from entropyguard.chunking.splitter import Chunker
-
-            chunk_separators = [
-                Chunker.decode_separator(sep) for sep in args.separators
-            ]
-
-    # Auto-discover text column if not provided
-    text_column = args.text_column
-    if text_column is None:
-        from entropyguard.ingestion import load_dataset
-
-        try:
-            lf = load_dataset(input_path, show_progress=False)  # Disable progress for auto-detection
-            # Inspect a small materialized sample to infer schema / string columns
-            df_head = lf.head(100).collect()
-            string_cols = [
-                col for col in df_head.columns if df_head[col].dtype == pl.Utf8
-            ]
-
-            if not string_cols:
-                print(
-                    "Error: Unable to auto-detect a text column (no string columns found).",
-                    file=sys.stderr,
-                )
-                return 1
-
-            # Choose the column with the longest average string length (fallback: first)
-            best_col = string_cols[0]
-            best_avg_len = -1.0
-            for col in string_cols:
-                lengths = df_head[col].cast(pl.Utf8).str.len_chars()
-                # Avoid division by zero
-                if len(lengths) == 0:
-                    continue
-                avg_len = float(lengths.mean())
-                if avg_len > best_avg_len:
-                    best_avg_len = avg_len
-                    best_col = col
-
-            text_column = best_col
-            print(f"⚠️  Auto-detected text column: '{text_column}'")
-        except Exception as e:
-            print(
-                f"Error: Failed to auto-detect text column: {e}",
-                file=sys.stderr,
-            )
-            return 1
-
-    # Run pipeline
-    print("Starting EntropyGuard pipeline...", file=sys.stderr)
-    print(f"   Input:  {args.input if args.input != '-' else 'stdin'}", file=sys.stderr)
-    print(f"   Output: {args.output if args.output != '-' else 'stdout'}", file=sys.stderr)
-    print(f"   Text column: {text_column}", file=sys.stderr)
-    print(f"   Min length: {args.min_length}", file=sys.stderr)
-    print(f"   Dedup threshold: {args.dedup_threshold}", file=sys.stderr)
-    print(f"   Model name: {args.model_name}", file=sys.stderr)
-    if args.chunk_size:
-        sep_info = (
-            f" (separators: {', '.join(repr(s) for s in chunk_separators)})"
-            if chunk_separators
-            else ""
-        )
-        print(
-            f"   Chunk size: {args.chunk_size} (overlap: {args.chunk_overlap}){sep_info}",
-            file=sys.stderr
-        )
-    if args.audit_log:
-        print(f"   Audit log: {args.audit_log}", file=sys.stderr)
-    if args.profile_memory:
-        print(f"   Memory profiling: enabled", file=sys.stderr)
-    if required_columns:
-        print(f"   Required columns: {', '.join(required_columns)}", file=sys.stderr)
-    print(file=sys.stderr)
-
-    # Create PipelineConfig from arguments
-    config = PipelineConfig(
-        input_path=input_path,
-        output_path=output_path,
-        text_column=text_column,
-        required_columns=required_columns,
-        min_length=args.min_length,
-        dedup_threshold=args.dedup_threshold,
-        audit_log_path=args.audit_log,
-        chunk_size=args.chunk_size,
-        chunk_overlap=args.chunk_overlap,
-        chunk_separators=chunk_separators,
-        model_name=args.model_name,
-        show_progress=not getattr(args, 'quiet', False),
-        profile_memory=args.profile_memory,
-    )
-    
-    pipeline = Pipeline(model_name=config.model_name)
-    result = pipeline.run(config)
-
-    if result["success"]:
-        stats = result["stats"]
-        
-        # If using stdout, write output to stdout
-        if use_stdout:
-            print("Writing to stdout...", file=sys.stderr)
-            try:
-                with open(output_path, 'r', encoding='utf-8') as f:
-                    for line in f:
-                        sys.stdout.write(line)
-                sys.stdout.flush()
-                # Clean up temp file
-                import os
-                os.unlink(output_path)
-            except Exception as e:
-                print(f"Error writing to stdout: {e}", file=sys.stderr)
-                return 1
-        
-        # Clean up temp input file if used
-        if args.input == "-":
-            import os
-            try:
-                os.unlink(input_path)
-            except:
-                pass
-        
-        print("Pipeline completed successfully!", file=sys.stderr)
-        print(file=sys.stderr)
-        print("Summary Statistics:", file=sys.stderr)
-        
-        # Basic row statistics
-        original_rows = stats.get('original_rows', 0)
-        final_rows = stats.get('final_rows', 0)
-        total_dropped = stats.get('total_dropped', 0)
-        duplicates_removed = stats.get('duplicates_removed', 0)
-        
-        if original_rows > 0:
-            print(f"   Original rows:     {original_rows:,}", file=sys.stderr)
-        else:
-            print("   Original rows:     N/A", file=sys.stderr)
-        
-        after_sanitization = stats.get('after_sanitization_rows')
-        if after_sanitization is not None and after_sanitization != 'N/A':
-            print(f"   After sanitization: {after_sanitization:,}", file=sys.stderr)
-        
-        if args.chunk_size:
-            after_chunking = stats.get('after_chunking_rows')
-            if after_chunking is not None and after_chunking != 'N/A':
-                print(f"   After chunking:     {after_chunking:,}", file=sys.stderr)
-        
-        after_dedup = stats.get('after_deduplication_rows')
-        if after_dedup is not None and after_dedup != 'N/A':
-            print(f"   After deduplication: {after_dedup:,}", file=sys.stderr)
-        
-        if duplicates_removed and duplicates_removed != 'N/A':
-            print(f"   Duplicates removed:  {duplicates_removed:,}", file=sys.stderr)
-        
-        if final_rows > 0:
-            print(f"   Final rows:       {final_rows:,}", file=sys.stderr)
-        else:
-            print("   Final rows:       N/A", file=sys.stderr)
-        
-        if total_dropped > 0:
-            print(f"   Total dropped:    {total_dropped:,}", file=sys.stderr)
-        else:
-            print("   Total dropped:    N/A", file=sys.stderr)
-        
-        # Percentage statistics
-        if original_rows > 0 and final_rows > 0:
-            retention_pct = (final_rows / original_rows) * 100
-            dropped_pct = (total_dropped / original_rows) * 100
-            print(file=sys.stderr)
-            print("Percentage Statistics:", file=sys.stderr)
-            print(f"   Retention rate:    {retention_pct:.2f}%", file=sys.stderr)
-            print(f"   Reduction rate:    {dropped_pct:.2f}%", file=sys.stderr)
-            
-            if duplicates_removed and duplicates_removed != 'N/A' and duplicates_removed > 0:
-                dupes_pct = (duplicates_removed / original_rows) * 100
-                print(f"   Duplicates:        {dupes_pct:.2f}%", file=sys.stderr)
-        
-        # Token statistics
-        total_dropped_chars = stats.get('total_dropped_chars', 0)
-        
-        if total_dropped_chars and total_dropped_chars > 0:
-            estimated_tokens = int(total_dropped_chars / 4)  # ~4 chars per token
-            print(file=sys.stderr)
-            print("Token Statistics:", file=sys.stderr)
-            print(f"   Estimated tokens saved: {estimated_tokens:,}", file=sys.stderr)
-            print(f"   Characters removed:    {total_dropped_chars:,}", file=sys.stderr)
-        
-        print(file=sys.stderr)
-        if not use_stdout:
-            print(f"Output saved to: {result['output_path']}", file=sys.stderr)
+        if args.output == "-" and not config.dry_run:
+            with open(output_path, "r", encoding="utf-8") as f:
+                shutil.copyfileobj(f, sys.stdout)
+            sys.stdout.flush()
+        if config.show_progress:
+            print_summary(dict(result["stats"]), args.output)
         return 0
-    else:
-        print("❌ Pipeline failed!", file=sys.stderr)
-        print(f"   Error: {result.get('error', 'Unknown error')}", file=sys.stderr)
-        return 1
+    except PipelineError as e:
+        print(f"Error: {e.message}", file=sys.stderr)
+        if e.hint:
+            print(f"Hint: {e.hint}", file=sys.stderr)
+        return e.code
+    except KeyboardInterrupt:
+        print("Interrupted.", file=sys.stderr)
+        return 130
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 if __name__ == "__main__":

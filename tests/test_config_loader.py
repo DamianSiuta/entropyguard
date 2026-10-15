@@ -211,13 +211,13 @@ def test_load_yaml_config_requires_pyyaml(monkeypatch):
 
 
 def test_load_toml_config_requires_tomli(monkeypatch):
-    """Test that TOML loading requires tomli."""
+    """Test that TOML loading fails clearly when neither tomllib nor tomli is available."""
     # Mock import to fail
     import sys
     original_import = __import__
     
     def mock_import(name, *args, **kwargs):
-        if name == "tomli":
+        if name in ("tomli", "tomllib"):
             raise ImportError("No module named 'tomli'")
         return original_import(name, *args, **kwargs)
     
@@ -269,3 +269,19 @@ def test_merge_config_empty_args():
 
 
 
+
+
+def test_load_toml_config(tmp_path):
+    """TOML works out of the box (tomllib on Python >= 3.11)."""
+    pytest.importorskip("tomllib")
+    path = tmp_path / "cfg.toml"
+    path.write_text('text_column = "body"\nbatch_size = 64\n')
+    assert _load_toml_config(path) == {"text_column": "body", "batch_size": 64}
+
+
+def test_broken_auto_detected_config_is_an_error(tmp_path, monkeypatch):
+    """A malformed .entropyguardrc.json must not be skipped silently."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".entropyguardrc.json").write_text("{not json")
+    with pytest.raises(ValueError, match="Invalid JSON"):
+        load_config_file()

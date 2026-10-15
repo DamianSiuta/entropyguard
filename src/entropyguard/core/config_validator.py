@@ -5,7 +5,7 @@ Validates PipelineConfig values with range checks, type validation, and
 clear error messages.
 """
 
-from typing import Optional
+from typing import Literal, Optional
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
@@ -25,7 +25,7 @@ class PipelineConfigModel(BaseModel):
     text_column: str = Field(..., min_length=1, description="Name of text column")
     required_columns: Optional[list[str]] = Field(default=None, description="Required columns")
     min_length: int = Field(default=50, ge=0, le=10000, description="Minimum text length")
-    dedup_threshold: float = Field(default=0.95, ge=0.0, le=1.0, description="Deduplication threshold")
+    dedup_threshold: float = Field(default=0.95, ge=0.0, le=1.0, description="Cosine similarity threshold")
     audit_log_path: Optional[str] = Field(default=None, description="Path to audit log")
     chunk_size: Optional[int] = Field(default=None, gt=0, le=1000000, description="Chunk size in characters")
     chunk_overlap: int = Field(default=50, ge=0, le=10000, description="Chunk overlap in characters")
@@ -38,6 +38,9 @@ class PipelineConfigModel(BaseModel):
     memory_report_path: Optional[str] = Field(default=None, description="Path to memory report")
     checkpoint_dir: Optional[str] = Field(default=None, description="Directory for checkpoints")
     resume: bool = Field(default=False, description="Resume from checkpoint")
+    auto_resume: bool = Field(default=True, description="Resume automatically if a valid checkpoint exists")
+    redact_pii: bool = Field(default=False, description="Redact PII in the output text")
+    index_type: Literal["auto", "flat", "hnsw"] = Field(default="auto", description="Similarity index type")
     
     @field_validator('required_columns')
     @classmethod
