@@ -1,0 +1,75 @@
+{
+  "threshold_cosine": 0.95,
+  "dimension": 384,
+  "runs": [
+    {
+      "implementation": "v1.23 find_duplicates",
+      "rows": 2000,
+      "seconds": 1.22,
+      "duplicates_found": 200,
+      "planted_duplicates": 200
+    },
+    {
+      "implementation": "v1.23 find_duplicates",
+      "rows": 4000,
+      "seconds": 4.46,
+      "duplicates_found": 400,
+      "planted_duplicates": 400
+    },
+    {
+      "implementation": "v1.23 find_duplicates",
+      "rows": 8000,
+      "seconds": 18.29,
+      "duplicates_found": 800,
+      "planted_duplicates": 800
+    },
+    {
+      "implementation": "v2 flat",
+      "rows": 2000,
+      "seconds": 0.04,
+      "duplicates_found": 200,
+      "planted_duplicates": 200
+    },
+    {
+      "implementation": "v2 flat",
+      "rows": 8000,
+      "seconds": 0.63,
+      "duplicates_found": 800,
+      "planted_duplicates": 800
+    },
+    {
+      "implementation": "v2 flat",
+      "rows": 100000,
+      "seconds": 50.62,
+      "duplicates_found": 10000,
+      "planted_duplicates": 10000
+    },
+    {
+      "implementation": "v2 hnsw",
+      "rows": 8000,
+      "seconds": 1.11,
+      "duplicates_found": 800,
+      "planted_duplicates": 800
+    },
+    {
+      "implementation": "v2 hnsw",
+      "rows": 100000,
+      "seconds": 28.13,
+      "duplicates_found": 9891,
+      "planted_duplicates": 10000
+    },
+    {
+      "implementation": "v2 hnsw",
+      "rows": 1000000,
+      "seconds": 466.47,
+      "duplicates_found": 52406,
+      "planted_duplicates": 100000
+    }
+  ],
+  "environment": {
+    "python": "3.12.3",
+    "machine": "x86_64",
+    "cpu_count": 4,
+    "faiss_threads": 4
+  }
+}
