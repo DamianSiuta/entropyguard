@@ -9,6 +9,9 @@ on:
       - "benchmarks/**"
       - ".github/workflows/benchmarks.yml"
 
+permissions:
+  contents: write
+
 jobs:
   benchmarks:
     runs-on: ubuntu-latest
@@ -47,3 +50,17 @@ jobs:
         with:
           name: benchmark-results
           path: benchmarks/results/*.json
+
+      # Artifacts are not always downloadable; also publish the results on a new
+      # branch bench-results/<sha> so they can be fetched with git.
+      - name: Push results to a bench-results branch
+        if: always()
+        run: |
+          lscpu > benchmarks/results/lscpu.txt
+          free -m > benchmarks/results/free.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "bench-results/${GITHUB_SHA::7}"
+          git add -f benchmarks/results
+          git commit -m "Benchmark results for ${GITHUB_SHA}"
+          git push origin "bench-results/${GITHUB_SHA::7}"

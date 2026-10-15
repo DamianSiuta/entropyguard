@@ -40,4 +40,16 @@ jobs:
         run: ruff check src tests benchmarks
 
       - name: Test
-        run: pytest
+        run: pytest --junitxml=junit.xml
+
+      - name: Report failed tests as annotations
+        if: failure()
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          for case in ET.parse("junit.xml").iter("testcase"):
+              for bad in list(case.findall("failure")) + list(case.findall("error")):
+                  msg = (bad.get("message") or "") + " | " + (bad.text or "")[-600:]
+                  msg = msg.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
+                  print(f"::error title={case.get('classname')}.{case.get('name')}::{msg}")
+          PY
