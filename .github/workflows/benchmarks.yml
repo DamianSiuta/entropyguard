@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - "benchmarks/**"
+      - "benchmarks/*.py"
       - ".github/workflows/benchmarks.yml"
 
 permissions:
