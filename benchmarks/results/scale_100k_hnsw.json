@@ -1,0 +1,31 @@
+{
+  "runs": [
+    {
+      "rows": 100000,
+      "pool_size": 808552,
+      "resampled_rows": 0,
+      "threshold": 0.95,
+      "index_type": "hnsw",
+      "total_seconds": 169.5,
+      "embedding_seconds": 157.5,
+      "semantic_index_seconds": 11.8,
+      "other_seconds": 0.2,
+      "rows_per_second": 589.9,
+      "peak_rss_mb": 1166.0,
+      "rows_embedded": 88898,
+      "exact_duplicates_removed": 11102,
+      "semantic_duplicates_removed": 3315,
+      "validation_dropped": 0,
+      "final_rows": 85583
+    }
+  ],
+  "environment": {
+    "python": "3.12.15",
+    "machine": "x86_64",
+    "processor": "x86_64",
+    "cpu_count": 4,
+    "torch_threads": 2,
+    "model": "all-MiniLM-L6-v2",
+    "device": "cpu"
+  }
+}
