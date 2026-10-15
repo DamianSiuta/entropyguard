@@ -20,6 +20,7 @@ import polars as pl
 from entropyguard.core.config_loader import load_config_file, merge_config_with_args
 from entropyguard.core.config_validator import validate_config
 from entropyguard.core.errors import PipelineError
+from entropyguard.core.exit_codes import ExitCode
 from entropyguard.core.logger import setup_logging
 from entropyguard.core.pipeline import Pipeline
 from entropyguard.core.types import PipelineConfig
@@ -154,7 +155,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             settings = resolve_settings(args)
         except (ValueError, OSError) as e:
             print(f"Error: invalid configuration: {e}", file=sys.stderr)
-            return 2
+            return ExitCode.VALIDATION_ERROR
 
         input_path = args.input
         if input_path == "-":
@@ -169,14 +170,14 @@ def main(argv: Optional[list[str]] = None) -> int:
                 text_column = detect_text_column(input_path)
             except (ValueError, FileNotFoundError) as e:
                 print(f"Error: cannot auto-detect the text column: {e}", file=sys.stderr)
-                return 2
+                return ExitCode.VALIDATION_ERROR
             print(f"Auto-detected text column: '{text_column}'", file=sys.stderr)
 
         settings.update(input_path=input_path, output_path=output_path, text_column=text_column)
         valid, error, _ = validate_config(settings)
         if not valid:
             print(f"Error: invalid configuration: {error}", file=sys.stderr)
-            return 2
+            return ExitCode.VALIDATION_ERROR
         config = PipelineConfig(**settings)
 
         result = Pipeline(model_name=config.model_name).run(config)
@@ -187,7 +188,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             sys.stdout.flush()
         if config.show_progress:
             print_summary(dict(result["stats"]), args.output)
-        return 0
+        return ExitCode.SUCCESS
     except PipelineError as e:
         print(f"Error: {e.message}", file=sys.stderr)
         if e.hint:
@@ -195,7 +196,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         return e.code
     except KeyboardInterrupt:
         print("Interrupted.", file=sys.stderr)
-        return 130
+        return ExitCode.SIGINT
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
