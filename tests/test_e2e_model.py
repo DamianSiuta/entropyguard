@@ -41,6 +41,16 @@ UNRELATED = [
 ]
 
 
+def variant_similarities(embedder) -> str:
+    """Cosine similarity of every variant to its original (for assertion messages)."""
+    lines = []
+    for original, variants in NEAR_DUPLICATE_GROUPS:
+        vectors = embedder.embed([t.lower() for t in [original, *variants]])
+        for variant, vec in zip(variants, vectors[1:]):
+            lines.append(f"{float(vectors[0] @ vec):.4f}  {variant!r}")
+    return "variant similarities: " + " ; ".join(lines)
+
+
 def build_rows() -> list[dict]:
     rows: list[dict] = []
     for original, _ in NEAR_DUPLICATE_GROUPS:
@@ -85,7 +95,9 @@ def test_near_duplicates_removed_original_text_kept_and_audited(embedder, datase
 
     # Exactly the originals and the unrelated rows survive, with unchanged text.
     kept_kinds = sorted(r["kind"] for r in output)
-    assert kept_kinds == sorted(["original"] * len(NEAR_DUPLICATE_GROUPS) + ["unrelated"] * len(UNRELATED))
+    assert kept_kinds == sorted(
+        ["original"] * len(NEAR_DUPLICATE_GROUPS) + ["unrelated"] * len(UNRELATED)
+    ), variant_similarities(embedder)
     for r in output:
         assert r == by_id[r["id"]], "output row differs from input row"
 
