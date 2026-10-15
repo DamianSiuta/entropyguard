@@ -5,7 +5,7 @@ Provides exponential backoff retry mechanism for network, I/O, and other transie
 """
 
 import time
-from typing import Any, Callable, Optional, TypeVar
+from typing import Callable, Optional, TypeVar
 
 T = TypeVar('T')
 

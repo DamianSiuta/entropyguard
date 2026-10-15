@@ -189,7 +189,6 @@ def test_merge_config_audit_log_mapping():
 def test_load_yaml_config_requires_pyyaml(monkeypatch):
     """Test that YAML loading requires pyyaml."""
     # Mock import to fail
-    import sys
     original_import = __import__
     
     def mock_import(name, *args, **kwargs):
@@ -213,7 +212,6 @@ def test_load_yaml_config_requires_pyyaml(monkeypatch):
 def test_load_toml_config_requires_tomli(monkeypatch):
     """Test that TOML loading fails clearly when neither tomllib nor tomli is available."""
     # Mock import to fail
-    import sys
     original_import = __import__
     
     def mock_import(name, *args, **kwargs):

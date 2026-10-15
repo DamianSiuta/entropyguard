@@ -12,7 +12,7 @@ from dataclasses import dataclass, asdict
 
 import polars as pl
 
-from entropyguard.core.errors import ValidationError, ProcessingError
+from entropyguard.core.errors import ProcessingError
 from entropyguard.core.retry import retry_file_operation
 
 

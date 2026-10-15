@@ -7,9 +7,7 @@ Tests cover:
 - Quality reporting (dropped row counts)
 """
 
-import pytest
 import polars as pl
-from typing import Any
 
 from entropyguard.validation import DataValidator, ValidationResult
 

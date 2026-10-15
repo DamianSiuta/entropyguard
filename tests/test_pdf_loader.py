@@ -8,7 +8,6 @@ import tempfile
 from pathlib import Path
 
 import pytest
-import polars as pl
 
 
 class TestPDFLoader:
@@ -18,8 +17,7 @@ class TestPDFLoader:
         """Test that PDF loader can be imported even without docling."""
         from entropyguard.ingestion.pdf_loader import (
             HAS_DOCLING,
-            find_pdf_files,
-            _check_docling_available
+            find_pdf_files
         )
         
         # Should be importable
@@ -118,7 +116,6 @@ class TestPDFLoaderIntegration:
     )
     def test_parse_pdf_to_markdown_with_docling(self) -> None:
         """Test parsing PDF to markdown (requires docling)."""
-        from entropyguard.ingestion.pdf_loader import parse_pdf_to_markdown
         
         # This would require an actual PDF file and docling installed
         # For now, we skip this test

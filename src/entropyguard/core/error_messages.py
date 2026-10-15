@@ -83,7 +83,7 @@ def format_file_not_found_error(file_path: str) -> str:
     # Find similar files
     similar_files = find_similar_files(file_path)
     if similar_files:
-        message += f"   Hint: Did you mean one of these?\n"
+        message += "   Hint: Did you mean one of these?\n"
         for similar in similar_files:
             message += f"      - {similar}\n"
     
@@ -116,9 +116,9 @@ def format_permission_error(file_path: str) -> str:
     
     # Check if file exists
     if file_path_obj.exists():
-        message += f"   Hint: File exists but you don't have permission to access it.\n"
+        message += "   Hint: File exists but you don't have permission to access it.\n"
         message += f"   Hint: Check file permissions: ls -la {file_path}\n"
-        message += f"   Hint: Try running with appropriate permissions or change file ownership.\n"
+        message += "   Hint: Try running with appropriate permissions or change file ownership.\n"
     else:
         # Check if directory is writable
         parent = file_path_obj.parent
@@ -127,7 +127,7 @@ def format_permission_error(file_path: str) -> str:
                 message += f"   Hint: Directory is not writable: {parent}\n"
                 message += f"   Hint: Check directory permissions: ls -la {parent}\n"
             else:
-                message += f"   Hint: Directory is writable, but file creation failed.\n"
+                message += "   Hint: Directory is writable, but file creation failed.\n"
         else:
             message += f"   Hint: Parent directory does not exist: {parent}\n"
     
@@ -150,15 +150,15 @@ def format_validation_error(error_msg: str, available_columns: Optional[list[str
     if available_columns:
         message += f"   Hint: Available columns: {', '.join(available_columns)}\n"
         if len(available_columns) > 0:
-            message += f"   Hint: Use --text-column to specify a different column.\n"
+            message += "   Hint: Use --text-column to specify a different column.\n"
     
     # Common validation errors
     if "required columns" in error_msg.lower():
-        message += f"   Hint: Ensure your input file contains the required columns.\n"
-        message += f"   Hint: Use --required-columns to specify which columns are required.\n"
+        message += "   Hint: Ensure your input file contains the required columns.\n"
+        message += "   Hint: Use --required-columns to specify which columns are required.\n"
     
     if "min_length" in error_msg.lower():
-        message += f"   Hint: Use --min-length to adjust the minimum text length requirement.\n"
+        message += "   Hint: Use --min-length to adjust the minimum text length requirement.\n"
     
     return message
 
@@ -190,12 +190,12 @@ def format_resource_error(error_msg: str, context: Optional[dict] = None) -> str
             message += f"   Hint: Check disk space: df -h {Path(context['output_path']).parent}\n"
     
     if "disk space" in error_msg.lower():
-        message += f"   Hint: Free up disk space or use a different output location.\n"
-        message += f"   Hint: Consider using --checkpoint-dir on a different drive.\n"
+        message += "   Hint: Free up disk space or use a different output location.\n"
+        message += "   Hint: Consider using --checkpoint-dir on a different drive.\n"
     
     if "memory" in error_msg.lower():
-        message += f"   Hint: Reduce batch size with --batch-size to use less memory.\n"
-        message += f"   Hint: Use --checkpoint-dir to enable checkpointing for large files.\n"
+        message += "   Hint: Reduce batch size with --batch-size to use less memory.\n"
+        message += "   Hint: Use --checkpoint-dir to enable checkpointing for large files.\n"
     
     return message
 

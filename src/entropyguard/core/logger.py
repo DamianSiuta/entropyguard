@@ -4,11 +4,10 @@ Structured logging for EntropyGuard.
 Provides production-grade structured logging with JSON output support.
 """
 
-import json
 import logging
 import sys
 import uuid
-from typing import Any, Optional
+from typing import Any
 
 try:
     import structlog

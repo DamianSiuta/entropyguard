@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    env:
+      # Model-backed tests must run in CI; a missing model is a failure, not a skip.
+      EG_REQUIRE_MODEL: "1"
+      HF_HOME: ${{ github.workspace }}/.hf-cache
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Cache Hugging Face model
+        uses: actions/cache@v4
+        with:
+          path: .hf-cache
+          key: hf-all-MiniLM-L6-v2-v1
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          # CPU-only torch keeps the install small.
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e . pytest pytest-cov ruff
+
+      - name: Lint
+        run: ruff check src tests benchmarks
+
+      - name: Test
+        run: pytest

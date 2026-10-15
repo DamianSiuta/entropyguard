@@ -13,9 +13,9 @@ __all__: list[str] = [
 # Optional PDF support (requires entropyguard[pdf])
 try:
     from entropyguard.ingestion.pdf_loader import (
-        find_pdf_files,
-        load_pdfs_from_directory,
-        pdf_directory_to_jsonl_stream,
+        find_pdf_files,  # noqa: F401 - re-exported via __all__
+        load_pdfs_from_directory,  # noqa: F401 - re-exported via __all__
+        pdf_directory_to_jsonl_stream,  # noqa: F401 - re-exported via __all__
         HAS_DOCLING as PDF_SUPPORT_AVAILABLE
     )
     __all__.extend([

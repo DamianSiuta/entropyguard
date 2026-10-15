@@ -52,7 +52,7 @@ def test_check_memory_usage_no_limit():
 def test_check_memory_usage_with_limit():
     """Test memory check with limit (if psutil available)."""
     try:
-        import psutil
+        import psutil  # noqa: F401 - availability check
         # Set very high limit (should pass)
         within_limit, error, usage = check_memory_usage(max_memory_mb=1000000)
         assert within_limit is True

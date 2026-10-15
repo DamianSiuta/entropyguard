@@ -2,18 +2,14 @@
 Tests for checkpoint and resume mechanism.
 """
 
-import pytest
 import tempfile
-import json
 from pathlib import Path
 
 import polars as pl
 
 from entropyguard.core.checkpoint import (
-    CheckpointManager,
-    CheckpointMetadata
+    CheckpointManager
 )
-from entropyguard.core.errors import ProcessingError
 
 
 def test_checkpoint_manager_disabled():

@@ -4,8 +4,6 @@ Tests for EntropyGuard core type definitions.
 Tests TypedDict and dataclass definitions.
 """
 
-import pytest
-from dataclasses import asdict
 
 from entropyguard.core.types import (
     PipelineConfig,

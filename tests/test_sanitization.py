@@ -9,9 +9,7 @@ Tests cover:
 - Type conversion and validation
 """
 
-import pytest
 import polars as pl
-from typing import Any
 
 from entropyguard.sanitization import (
     normalize_text,

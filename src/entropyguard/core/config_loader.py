@@ -8,7 +8,6 @@ import json
 from pathlib import Path
 from typing import Any, Optional
 
-from entropyguard.core.types import PipelineConfig
 
 
 def load_config_file(config_path: Optional[str] = None) -> dict[str, Any]:

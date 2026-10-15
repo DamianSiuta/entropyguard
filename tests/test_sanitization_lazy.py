@@ -4,14 +4,11 @@ Tests for lazy sanitization functions.
 Tests the hybrid lazy sanitization approach.
 """
 
-import tempfile
-from pathlib import Path
 
 import pytest
 import polars as pl
 
 from entropyguard.core.sanitization_lazy import sanitize_lazyframe
-from entropyguard.core.errors import ProcessingError
 from entropyguard.sanitization import SanitizationConfig
 
 

@@ -10,7 +10,6 @@ materialize the data with `.collect()` or use streaming sinks.
 """
 
 import os
-import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -114,13 +113,13 @@ def validate_input_file(file_path: str, max_size_gb: float = 100.0) -> tuple[boo
                 from entropyguard.ingestion.pdf_loader import HAS_DOCLING
                 if not HAS_DOCLING:
                     return False, (
-                        f"PDF directory detected but PDF support not installed. "
-                        f"Install with: pip install entropyguard[pdf]"
+                        "PDF directory detected but PDF support not installed. "
+                        "Install with: pip install entropyguard[pdf]"
                     )
             except ImportError:
                 return False, (
-                    f"PDF directory detected but PDF support not installed. "
-                    f"Install with: pip install entropyguard[pdf]"
+                    "PDF directory detected but PDF support not installed. "
+                    "Install with: pip install entropyguard[pdf]"
                 )
             return True, None
         else:
@@ -219,8 +218,8 @@ def load_dataset(file_path: str, show_progress: bool = True) -> pl.LazyFrame:
             from entropyguard.ingestion.pdf_loader import pdf_directory_to_jsonl_stream
         except ImportError as e:
             raise ImportError(
-                f"PDF directory detected but PDF support not installed. "
-                f"Install with: pip install entropyguard[pdf]"
+                "PDF directory detected but PDF support not installed. "
+                "Install with: pip install entropyguard[pdf]"
             ) from e
         
         # Convert PDF directory to temporary JSONL file

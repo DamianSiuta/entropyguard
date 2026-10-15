@@ -7,9 +7,8 @@ Tests memory profiling functionality.
 import tempfile
 from pathlib import Path
 
-import pytest
 
-from entropyguard.core.memory_profiler import MemoryProfiler, MemorySnapshot
+from entropyguard.core.memory_profiler import MemoryProfiler
 
 
 def test_memory_profiler_disabled():
@@ -23,7 +22,7 @@ def test_memory_profiler_disabled():
 def test_memory_profiler_enabled():
     """Test that enabled profiler creates snapshots."""
     profiler = MemoryProfiler(enabled=True)
-    snapshot = profiler.snapshot("test_stage")
+    profiler.snapshot("test_stage")
     
     # Snapshot may be None if no memory monitoring available
     # But profiler should still be enabled
@@ -94,7 +93,7 @@ def test_memory_profiler_print_summary(capsys):
     
     profiler.print_summary()
     
-    captured = capsys.readouterr()
+    capsys.readouterr()
     # Should print something (even if no memory data)
     # Just verify it doesn't crash
     assert True  # If we get here, it didn't crash

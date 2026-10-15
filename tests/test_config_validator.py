@@ -2,11 +2,9 @@
 Tests for configuration validator using Pydantic.
 """
 
-import pytest
 from entropyguard.core.config_validator import (
     validate_config,
-    convert_validated_to_config,
-    PipelineConfigModel
+    convert_validated_to_config
 )
 
 

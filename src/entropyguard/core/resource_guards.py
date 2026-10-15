@@ -5,14 +5,13 @@ Provides memory limits, disk space checks, and timeout guards to prevent
 resource exhaustion and improve error messages.
 """
 
-import os
 import shutil
 import time
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    import polars as pl
+    pass
 
 from entropyguard.core.errors import ResourceError
 
