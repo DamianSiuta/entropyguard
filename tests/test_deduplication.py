@@ -1,243 +1,187 @@
 """
-Test suite for EntropyGuard Deduplication Module.
+Tests for the deduplication module: Embedder, VectorIndex and SemanticDeduplicator.
 
-Tests cover:
-- Embedder: Text to vector conversion
-- VectorIndex: FAISS-based similarity search
-- Duplicate detection based on semantic similarity
+Thresholds are cosine similarities (higher = more similar).
 """
 
 import numpy as np
 import pytest
-from typing import Any
 
-from entropyguard.deduplication import Embedder, VectorIndex
+from entropyguard.deduplication import Embedder, SemanticDeduplicator, VectorIndex
+
+
+def _unit(rows: np.ndarray) -> np.ndarray:
+    return (rows / np.linalg.norm(rows, axis=1, keepdims=True)).astype(np.float32)
+
+
+def _brute_force_greedy(x: np.ndarray, threshold: float) -> dict[int, int]:
+    """Reference implementation of keep-first greedy deduplication."""
+    sims = x @ x.T
+    kept: list[int] = []
+    dups: dict[int, int] = {}
+    for i in range(len(x)):
+        if kept:
+            k = np.array(kept)
+            j = int(k[np.argmax(sims[i, k])])
+            if sims[i, j] >= threshold:
+                dups[i] = j
+                continue
+        kept.append(i)
+    return dups
 
 
 class TestEmbedder:
-    """Test Embedder class for text-to-vector conversion."""
-
-    def test_embedder_initialization(self) -> None:
-        """Test Embedder can be initialized."""
+    def test_initialization_is_lazy(self) -> None:
         embedder = Embedder()
-        assert embedder is not None
         assert embedder.model_name == "all-MiniLM-L6-v2"
+        assert embedder._model is None
 
-    def test_embed_single_text(self) -> None:
-        """Test embedding a single text string."""
-        embedder = Embedder()
-        text = "This is a test sentence."
-        embedding = embedder.embed([text])
+    def test_dimension_comes_from_model(self, embedder: Embedder) -> None:
+        assert embedder.dimension == 384
 
-        assert isinstance(embedding, np.ndarray)
-        assert embedding.shape == (1, 384)  # all-MiniLM-L6-v2 produces 384-dim vectors
-        assert embedding.dtype == np.float32
+    def test_embed_shape_dtype_and_norm(self, embedder: Embedder) -> None:
+        vectors = embedder.embed(["First sentence.", "Second sentence.", "Third one."])
+        assert vectors.shape == (3, embedder.dimension)
+        assert vectors.dtype == np.float32
+        np.testing.assert_allclose(np.linalg.norm(vectors, axis=1), 1.0, atol=1e-5)
 
-    def test_embed_multiple_texts(self) -> None:
-        """Test embedding multiple texts."""
-        embedder = Embedder()
-        texts = [
-            "First sentence for testing.",
-            "Second sentence for testing.",
-            "Third sentence for testing.",
-        ]
-        embeddings = embedder.embed(texts)
+    def test_embed_empty_list(self, embedder: Embedder) -> None:
+        assert embedder.embed([]).shape == (0, embedder.dimension)
 
-        assert isinstance(embeddings, np.ndarray)
-        assert embeddings.shape == (3, 384)
-        assert embeddings.dtype == np.float32
-
-    def test_embed_empty_list(self) -> None:
-        """Test embedding empty list."""
-        embedder = Embedder()
-        embeddings = embedder.embed([])
-
-        assert isinstance(embeddings, np.ndarray)
-        assert embeddings.shape == (0, 384)
-
-    def test_embed_similar_texts_produce_similar_vectors(self) -> None:
-        """Test that semantically similar texts produce similar embeddings."""
-        embedder = Embedder()
-        text1 = "The cat sat on the mat."
-        text2 = "A cat was sitting on a mat."
-        text3 = "The weather is nice today."
-
-        emb1 = embedder.embed([text1])[0]
-        emb2 = embedder.embed([text2])[0]
-        emb3 = embedder.embed([text3])[0]
-
-        # Similar texts should have higher cosine similarity
-        similarity_12 = np.dot(emb1, emb2) / (
-            np.linalg.norm(emb1) * np.linalg.norm(emb2)
+    def test_paraphrases_are_closer_than_unrelated_text(self, embedder: Embedder) -> None:
+        a, b, c = embedder.embed(
+            [
+                "How do I reset my password?",
+                "How can I reset my password?",
+                "The stock market fell sharply on Monday.",
+            ]
         )
-        similarity_13 = np.dot(emb1, emb3) / (
-            np.linalg.norm(emb1) * np.linalg.norm(emb3)
-        )
+        assert float(a @ b) > 0.9
+        assert float(a @ c) < 0.3
 
-        assert similarity_12 > similarity_13, (
-            "Similar texts should have higher similarity than dissimilar ones"
-        )
-
-    def test_embed_identical_texts_produce_identical_vectors(self) -> None:
-        """Test that identical texts produce identical embeddings."""
-        embedder = Embedder()
-        text = "This is an identical sentence."
-
-        emb1 = embedder.embed([text])[0]
-        emb2 = embedder.embed([text])[0]
-
-        # Identical texts should produce identical embeddings
-        np.testing.assert_array_almost_equal(emb1, emb2, decimal=5)
+    def test_identical_texts_have_similarity_one(self, embedder: Embedder) -> None:
+        a, b = embedder.embed(["Same text here.", "Same text here."])
+        assert float(a @ b) == pytest.approx(1.0, abs=1e-5)
 
 
 class TestVectorIndex:
-    """Test VectorIndex class for FAISS-based similarity search."""
-
-    def test_vector_index_initialization(self) -> None:
-        """Test VectorIndex can be initialized."""
-        index = VectorIndex(dimension=384)
-        assert index is not None
-        assert index.dimension == 384
+    @pytest.mark.parametrize("index_type", ["flat", "hnsw"])
+    def test_add_and_size(self, index_type: str) -> None:
+        index = VectorIndex(dimension=8, index_type=index_type)
         assert index.size() == 0
-
-    def test_add_vectors_single(self) -> None:
-        """Test adding a single vector to the index."""
-        index = VectorIndex(dimension=384)
-        vector = np.random.randn(1, 384).astype(np.float32)
-
-        index.add_vectors(vector)
-        assert index.size() == 1
-
-    def test_add_vectors_multiple(self) -> None:
-        """Test adding multiple vectors to the index."""
-        index = VectorIndex(dimension=384)
-        vectors = np.random.randn(5, 384).astype(np.float32)
-
-        index.add_vectors(vectors)
+        index.add_vectors(np.random.randn(3, 8).astype(np.float32))
+        index.add_vectors(np.random.randn(2, 8).astype(np.float32))
         assert index.size() == 5
 
-    def test_add_vectors_batch(self) -> None:
-        """Test adding vectors in batches."""
-        index = VectorIndex(dimension=384)
-        batch1 = np.random.randn(3, 384).astype(np.float32)
-        batch2 = np.random.randn(2, 384).astype(np.float32)
+    def test_rejects_wrong_dimension(self) -> None:
+        index = VectorIndex(dimension=8)
+        with pytest.raises(ValueError, match="dimension mismatch"):
+            index.add_vectors(np.random.randn(2, 4).astype(np.float32))
 
-        index.add_vectors(batch1)
-        index.add_vectors(batch2)
-        assert index.size() == 5
+    def test_rejects_unknown_index_type(self) -> None:
+        with pytest.raises(ValueError, match="index_type"):
+            VectorIndex(dimension=8, index_type="ivf")  # type: ignore[arg-type]
 
-    def test_search_find_nearest_neighbor(self) -> None:
-        """Test searching for nearest neighbors."""
-        index = VectorIndex(dimension=384)
-
-        # Add some vectors
-        vectors = np.random.randn(10, 384).astype(np.float32)
+    def test_search_returns_cosine_similarity(self) -> None:
+        index = VectorIndex(dimension=8)
+        vectors = _unit(np.random.randn(10, 8))
         index.add_vectors(vectors)
+        sims, idx = index.search(vectors[3], k=1)
+        assert idx[0, 0] == 3
+        assert sims[0, 0] == pytest.approx(1.0, abs=1e-5)
 
-        # Search for nearest neighbor to first vector
-        query = vectors[0:1]
-        distances, indices = index.search(query, k=3)
+    def test_search_k_larger_than_index(self) -> None:
+        index = VectorIndex(dimension=8)
+        index.add_vectors(np.random.randn(3, 8).astype(np.float32))
+        sims, idx = index.search(np.random.randn(8).astype(np.float32), k=10)
+        assert sims.shape == (1, 3)
 
-        assert len(distances) == 1
-        assert len(distances[0]) == 3
-        assert len(indices) == 1
-        assert len(indices[0]) == 3
-
-        # First result should be the query vector itself (distance ~0)
-        assert indices[0][0] == 0
-        assert distances[0][0] < 0.01  # Should be very close to 0
-
-    def test_search_k_larger_than_index_size(self) -> None:
-        """Test search when k is larger than index size."""
-        index = VectorIndex(dimension=384)
-        vectors = np.random.randn(3, 384).astype(np.float32)
+    def test_vectors_are_stored_once_in_faiss(self) -> None:
+        index = VectorIndex(dimension=8)
+        vectors = _unit(np.random.randn(4, 8))
         index.add_vectors(vectors)
+        assert not hasattr(index, "_vectors")
+        np.testing.assert_allclose(index.reconstruct(0, 4), vectors, atol=1e-6)
 
-        query = vectors[0:1]
-        distances, indices = index.search(query, k=10)
-
-        # Should return at most 3 results (size of index)
-        assert len(distances[0]) <= 3
-        assert len(indices[0]) <= 3
-
-    def test_find_duplicates_identical_vectors(self) -> None:
-        """Test finding duplicates with identical vectors."""
-        index = VectorIndex(dimension=384)
-
-        # Add identical vectors
-        vector = np.random.randn(1, 384).astype(np.float32)
-        vectors = np.vstack([vector, vector, vector])
-        index.add_vectors(vectors)
-
-        duplicates = index.find_duplicates(threshold=0.1)
-
-        # Should find all vectors as duplicates of each other
-        assert len(duplicates) > 0
-        # All three vectors should be in duplicate groups
-        all_indices = set()
-        for group in duplicates:
-            all_indices.update(group)
-        assert len(all_indices) == 3
-
-    def test_find_duplicates_similar_vectors(self) -> None:
-        """Test finding duplicates with similar (but not identical) vectors."""
-        index = VectorIndex(dimension=384)
-
-        # Create similar vectors (add small noise)
-        base_vector = np.random.randn(1, 384).astype(np.float32)
-        noise = np.random.randn(2, 384).astype(np.float32) * 0.01  # Small noise
-        similar_vectors = base_vector + noise
-        vectors = np.vstack([base_vector, similar_vectors])
-        index.add_vectors(vectors)
-
-        duplicates = index.find_duplicates(threshold=0.5)
-
-        # Should find similar vectors as duplicates
-        assert len(duplicates) > 0
+    def test_find_duplicates_groups_near_copies(self) -> None:
+        rng = np.random.default_rng(0)
+        base = _unit(rng.standard_normal((5, 32)))
+        near = _unit(base + 0.01 * rng.standard_normal((5, 32)))
+        index = VectorIndex(dimension=32)
+        index.add_vectors(np.vstack([base, near]))
+        groups = index.find_duplicates(threshold=0.95)
+        assert sorted(sorted(g) for g in groups) == [[i, i + 5] for i in range(5)]
 
     def test_find_duplicates_dissimilar_vectors(self) -> None:
-        """Test that dissimilar vectors are not marked as duplicates."""
-        index = VectorIndex(dimension=384)
+        index = VectorIndex(dimension=64)
+        index.add_vectors(np.random.default_rng(1).standard_normal((50, 64)).astype(np.float32))
+        assert index.find_duplicates(threshold=0.95) == []
 
-        # Add very different vectors
-        vectors = np.random.randn(5, 384).astype(np.float32)
-        # Normalize to unit length for fair comparison
-        norms = np.linalg.norm(vectors, axis=1, keepdims=True)
-        vectors = vectors / norms
-        index.add_vectors(vectors)
 
-        duplicates = index.find_duplicates(threshold=0.1)
+class TestSemanticDeduplicator:
+    @pytest.mark.parametrize("step_rows", [3000, 700])
+    def test_flat_matches_brute_force(self, step_rows: int) -> None:
+        rng = np.random.default_rng(42)
+        x = _unit(rng.standard_normal((3000, 64)))
+        # Rows 2000..2999 are noisy copies of rows 0..999; also chain a few copies.
+        x[2000:] = _unit(x[:1000] + 0.02 * rng.standard_normal((1000, 64)))
+        expected = _brute_force_greedy(x, 0.95)
+        assert len(expected) >= 1000
 
-        # With very different vectors and low threshold, should find few/no duplicates
-        # (This depends on randomness, but with normalized random vectors, similarity should be low)
+        dedup = SemanticDeduplicator(64, 0.95, "flat")
+        got: dict[int, int] = {}
+        for start in range(0, len(x), step_rows):
+            ids = list(range(start, min(start + step_rows, len(x))))
+            for m in dedup.process_batch(x[ids], ids):
+                got[m.row_id] = m.duplicate_of
+        assert got == expected
+        assert dedup.kept_count == len(x) - len(expected)
 
-    def test_integration_embedder_and_index(self) -> None:
-        """Integration test: Embedder + VectorIndex."""
-        embedder = Embedder()
-        index = VectorIndex(dimension=384)
+    def test_hnsw_finds_planted_duplicates(self) -> None:
+        rng = np.random.default_rng(7)
+        x = _unit(rng.standard_normal((4000, 64)))
+        x[3000:] = _unit(x[:1000] + 0.02 * rng.standard_normal((1000, 64)))
+        expected = _brute_force_greedy(x, 0.95)
+        got = {
+            m.row_id: m.duplicate_of
+            for m in SemanticDeduplicator(64, 0.95, "hnsw").process_batch(x, range(len(x)))
+        }
+        agreement = sum(got.get(k) == v for k, v in expected.items()) / len(expected)
+        assert agreement > 0.99
+        assert set(got) <= set(expected)
 
-        # Embed some texts
-        texts = [
-            "The cat sat on the mat.",
-            "A cat was sitting on a mat.",  # Similar to first
-            "The weather is nice today.",  # Different
-            "The cat sat on the mat.",  # Identical to first
-        ]
+    def test_duplicates_always_point_to_kept_rows(self) -> None:
+        rng = np.random.default_rng(3)
+        # A chain a -> b -> c where a~b and b~c but a!~c.
+        a = _unit(rng.standard_normal((1, 16)))[0]
+        direction = _unit(rng.standard_normal((1, 16)))[0]
+        direction -= (direction @ a) * a
+        direction /= np.linalg.norm(direction)
+        chain = np.stack([np.cos(t) * a + np.sin(t) * direction for t in (0.0, 0.25, 0.5)])
+        matches = SemanticDeduplicator(16, float(np.cos(0.3)), "flat").process_batch(
+            chain.astype(np.float32), [10, 11, 12]
+        )
+        # Row 11 is a duplicate of 10; row 12 is only similar to the dropped row 11,
+        # so it must be kept rather than removed transitively.
+        assert [(m.row_id, m.duplicate_of) for m in matches] == [(11, 10)]
 
-        embeddings = embedder.embed(texts)
-        index.add_vectors(embeddings)
+    def test_similarity_is_reported(self) -> None:
+        v = _unit(np.random.randn(1, 8))
+        matches = SemanticDeduplicator(8, 0.9).process_batch(np.vstack([v, v]), [0, 1])
+        assert len(matches) == 1
+        assert matches[0].similarity == pytest.approx(1.0, abs=1e-5)
 
-        # Find duplicates
-        duplicates = index.find_duplicates(threshold=0.3)
+    def test_rejects_invalid_threshold(self) -> None:
+        with pytest.raises(ValueError):
+            SemanticDeduplicator(8, 1.5)
 
-        # Should find at least the identical texts as duplicates
-        assert len(duplicates) > 0
 
-        # Verify that identical texts (indices 0 and 3) are in same duplicate group
-        found_identical = False
-        for group in duplicates:
-            if 0 in group and 3 in group:
-                found_identical = True
-                break
-        assert found_identical, "Identical texts should be found as duplicates"
-
+def test_embedder_and_deduplicator_remove_paraphrase(embedder: Embedder) -> None:
+    texts = [
+        "What is the best way to learn Python?",
+        "Paris is the capital of France.",
+        "What's the best way to learn Python?",
+    ]
+    vectors = embedder.embed(texts)
+    matches = SemanticDeduplicator(embedder.dimension, 0.9).process_batch(vectors, [0, 1, 2])
+    assert [(m.row_id, m.duplicate_of) for m in matches] == [(2, 0)]

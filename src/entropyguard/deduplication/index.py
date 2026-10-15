@@ -1,257 +1,221 @@
 """
-VectorIndex class for FAISS-based similarity search and duplicate detection.
+FAISS-based vector index and greedy semantic duplicate detection.
+
+All vectors are L2-normalized, so the inner product equals cosine similarity.
+Thresholds in this module are cosine similarities in [-1, 1] (higher = more similar).
 """
 
-import numpy as np
-from typing import TYPE_CHECKING
+from __future__ import annotations
 
-if TYPE_CHECKING:
-    import faiss
+from dataclasses import dataclass
+from typing import Literal, Sequence
+
+import numpy as np
 
 try:
     import faiss
-except ImportError:
-    faiss = None  # type: ignore
+except ImportError:  # pragma: no cover - faiss-cpu is a hard dependency
+    faiss = None  # type: ignore[assignment]
+
+IndexType = Literal["flat", "hnsw"]
+
+# HNSW parameters. M controls graph degree (memory/recall trade-off),
+# efSearch the size of the candidate list during search.
+HNSW_M = 16
+HNSW_EF_CONSTRUCTION = 40
+HNSW_EF_SEARCH = 32
+
+# Batch size used when reconstructing vectors in find_duplicates().
+_RECONSTRUCT_BATCH = 4096
+# Rows compared exactly with each other inside one step (B x B similarity matrix).
+_DEDUP_STEP = 4096
+
+
+def _as_normalized_float32(vectors: np.ndarray) -> np.ndarray:
+    """Return a C-contiguous float32 copy of ``vectors`` with unit L2 norm rows."""
+    out = np.array(vectors, dtype=np.float32, order="C", copy=True)
+    if out.ndim == 1:
+        out = out.reshape(1, -1)
+    faiss.normalize_L2(out)
+    return out
 
 
 class VectorIndex:
     """
-    FAISS-based vector index for similarity search and duplicate detection.
+    Cosine-similarity index over L2-normalized vectors.
 
-    Uses IndexFlatL2 (Euclidean distance) for MVP. This is:
-    - Simple and reliable
-    - Exact search (no approximation)
-    - Good for small to medium datasets
-    - CPU-friendly
+    Vectors live only inside the FAISS index (no second copy in Python).
+
+    index_type:
+        "flat": exact search (IndexFlatIP). Cost per query is O(n * d).
+        "hnsw": approximate search (IndexHNSWFlat, inner product). Much faster
+                on large collections, may miss a small fraction of neighbours.
     """
 
-    def __init__(self, dimension: int = 384) -> None:
-        """
-        Initialize the VectorIndex.
-
-        Args:
-            dimension: Dimension of the vectors (default: 384 for all-MiniLM-L6-v2)
-
-        Raises:
-            ImportError: If faiss-cpu is not installed
-        """
+    def __init__(self, dimension: int, index_type: IndexType = "flat") -> None:
         if faiss is None:
-            raise ImportError(
-                "faiss-cpu is required. Install with: pip install faiss-cpu"
-            )
+            raise ImportError("faiss-cpu is required. Install with: pip install faiss-cpu")
+        if dimension <= 0:
+            raise ValueError(f"dimension must be > 0, got {dimension}")
+        if index_type not in ("flat", "hnsw"):
+            raise ValueError(f"index_type must be 'flat' or 'hnsw', got {index_type!r}")
 
         self.dimension = dimension
-        self._index: faiss.IndexFlatL2 = faiss.IndexFlatL2(dimension)
-        self._vector_count = 0
-        # Store vectors for duplicate detection
-        self._vectors: list[np.ndarray] = []
+        self.index_type: IndexType = index_type
+        if index_type == "flat":
+            self._index = faiss.IndexFlatIP(dimension)
+        else:
+            self._index = faiss.IndexHNSWFlat(dimension, HNSW_M, faiss.METRIC_INNER_PRODUCT)
+            self._index.hnsw.efConstruction = HNSW_EF_CONSTRUCTION
+            self._index.hnsw.efSearch = HNSW_EF_SEARCH
 
     def size(self) -> int:
-        """
-        Get the number of vectors in the index.
+        """Number of vectors in the index."""
+        return int(self._index.ntotal)
 
-        Returns:
-            Number of vectors currently in the index
-        """
-        return self._vector_count
-
-    def add_vectors(self, vectors: np.ndarray) -> None:
-        """
-        Add vectors to the index.
-
-        Args:
-            vectors: NumPy array of shape (N, dimension) where N is the number of vectors.
-                    Must be float32 dtype.
-
-        Raises:
-            ValueError: If vectors have wrong shape or dtype
-        """
-        if vectors.size == 0:
-            return
-
-        # Validate shape
+    def _check_shape(self, vectors: np.ndarray) -> None:
         if vectors.ndim != 2:
             raise ValueError(f"Vectors must be 2D array, got {vectors.ndim}D")
-
         if vectors.shape[1] != self.dimension:
             raise ValueError(
                 f"Vector dimension mismatch: expected {self.dimension}, got {vectors.shape[1]}"
             )
 
-        # Convert to float32 if needed
-        if vectors.dtype != np.float32:
-            vectors = vectors.astype(np.float32)
+    def add_vectors(self, vectors: np.ndarray) -> None:
+        """Add vectors of shape (N, dimension). They are L2-normalized before insertion."""
+        if vectors.size == 0:
+            return
+        self._check_shape(vectors)
+        self._index.add(_as_normalized_float32(vectors))
 
-        # Add to FAISS index
-        self._index.add(vectors)
-        self._vector_count += vectors.shape[0]
-
-        # Store vectors for duplicate detection
-        for i in range(vectors.shape[0]):
-            self._vectors.append(vectors[i].copy())
-
-    def search(
-        self, query_vector: np.ndarray, k: int = 10
-    ) -> tuple[list[list[float]], list[list[int]]]:
+    def search(self, query: np.ndarray, k: int = 10) -> tuple[np.ndarray, np.ndarray]:
         """
-        Search for k nearest neighbors to the query vector.
+        Return (similarities, indices) of the k nearest neighbours for each query row.
 
-        Args:
-            query_vector: Query vector(s) of shape (1, dimension) or (N, dimension)
-            k: Number of nearest neighbors to return
-
-        Returns:
-            Tuple of (distances, indices):
-            - distances: List of lists, where each inner list contains distances to k nearest neighbors
-            - indices: List of lists, where each inner list contains indices of k nearest neighbors
-
-        Raises:
-            ValueError: If index is empty or query has wrong shape
+        Both arrays have shape (n_queries, k). Missing neighbours have index -1.
         """
-        if self._vector_count == 0:
+        if self.size() == 0:
             raise ValueError("Cannot search empty index")
+        if query.ndim == 1:
+            query = query.reshape(1, -1)
+        self._check_shape(query)
+        k = max(1, min(k, self.size()))
+        sims, idx = self._index.search(_as_normalized_float32(query), k)
+        return sims, idx
 
-        # Validate and prepare query
-        if query_vector.ndim == 1:
-            query_vector = query_vector.reshape(1, -1)
+    def reconstruct(self, start: int, count: int) -> np.ndarray:
+        """Return stored vectors [start, start + count)."""
+        return self._index.reconstruct_n(start, count)
 
-        if query_vector.shape[1] != self.dimension:
-            raise ValueError(
-                f"Query dimension mismatch: expected {self.dimension}, got {query_vector.shape[1]}"
-            )
-
-        # Convert to float32 if needed
-        if query_vector.dtype != np.float32:
-            query_vector = query_vector.astype(np.float32)
-
-        # Limit k to available vectors
-        k = min(k, self._vector_count)
-
-        # Search
-        distances, indices = self._index.search(query_vector, k)
-
-        # Convert to lists for easier use
-        distances_list = [dist.tolist() for dist in distances]
-        indices_list = [idx.tolist() for idx in indices]
-
-        return distances_list, indices_list
-
-    def find_duplicates(self, threshold: float = 0.3) -> list[set[int]]:
+    def find_duplicates(self, threshold: float = 0.95) -> list[set[int]]:
         """
-        Find duplicate vectors based on distance threshold.
+        Group stored vectors into duplicate groups.
 
-        Uses L2 (Euclidean) distance. Vectors with distance <= threshold are considered duplicates.
+        Uses the same greedy keep-first rule as SemanticDeduplicator: a vector is a
+        duplicate if its most similar *earlier kept* vector has cosine similarity
+        >= threshold. Each returned set holds one kept vector and its duplicates.
+        """
+        dedup = SemanticDeduplicator(self.dimension, threshold, self.index_type)
+        groups: dict[int, set[int]] = {}
+        total = self.size()
+        for start in range(0, total, _RECONSTRUCT_BATCH):
+            count = min(_RECONSTRUCT_BATCH, total - start)
+            ids = range(start, start + count)
+            for match in dedup.process_batch(self.reconstruct(start, count), ids):
+                groups.setdefault(match.duplicate_of, {match.duplicate_of}).add(match.row_id)
+        return list(groups.values())
+
+
+@dataclass(frozen=True)
+class DuplicateMatch:
+    """A row found to be a semantic duplicate of an earlier kept row."""
+
+    row_id: int
+    duplicate_of: int
+    similarity: float
+
+
+class SemanticDeduplicator:
+    """
+    Streaming greedy deduplication: keep the first occurrence, drop later near-duplicates.
+
+    Rows are processed in input order, batch by batch. For every row the most similar
+    previously *kept* row is looked up (k=1 search against the index of kept rows plus
+    an exact comparison with earlier kept rows of the same batch). If that similarity
+    is >= threshold the row is a duplicate; otherwise it is kept and added to the index.
+
+    Properties:
+    - every dropped row points to a row that is kept in the output (no chains);
+    - only kept vectors are stored, once, inside FAISS;
+    - with index_type="flat" the result is exact; "hnsw" is approximate.
+    """
+
+    def __init__(self, dimension: int, threshold: float, index_type: IndexType = "flat") -> None:
+        if not -1.0 <= threshold <= 1.0:
+            raise ValueError(f"threshold must be a cosine similarity in [-1, 1], got {threshold}")
+        self.threshold = float(threshold)
+        self.index = VectorIndex(dimension, index_type)
+        # Maps position in the FAISS index -> caller-provided row id.
+        self._kept_ids: list[int] = []
+
+    @property
+    def kept_count(self) -> int:
+        return len(self._kept_ids)
+
+    def process_batch(self, vectors: np.ndarray, row_ids: Sequence[int]) -> list[DuplicateMatch]:
+        """
+        Process one batch of embeddings (in input order) and return the duplicates found.
 
         Args:
-            threshold: Maximum distance for vectors to be considered duplicates.
-                      Lower values = stricter (fewer duplicates found).
-                      Typical range: 0.1-0.5 for normalized embeddings.
-
-        Returns:
-            List of sets, where each set contains indices of duplicate vectors.
-            Each vector appears in at most one set.
-
-        Note:
-            This uses a simple clustering approach: for each vector, find all neighbors
-            within threshold distance and group them together.
+            vectors: array of shape (B, dimension)
+            row_ids: B caller-defined identifiers, reported back in DuplicateMatch
         """
-        if self._vector_count == 0:
+        n = len(row_ids)
+        if vectors.shape[0] != n:
+            raise ValueError(f"Got {vectors.shape[0]} vectors for {n} row ids")
+        if n == 0:
             return []
+        self.index._check_shape(vectors)
+        matches: list[DuplicateMatch] = []
+        for start in range(0, n, _DEDUP_STEP):
+            stop = min(start + _DEDUP_STEP, n)
+            matches.extend(
+                self._process_step(
+                    _as_normalized_float32(vectors[start:stop]), row_ids[start:stop]
+                )
+            )
+        return matches
 
-        # Get all vectors from index (FAISS doesn't provide direct access, so we search)
-        # We'll use a more efficient approach: for each vector, find its neighbors
-        duplicate_groups: list[set[int]] = []
-        processed: set[int] = set()
+    def _process_step(self, batch: np.ndarray, row_ids: Sequence[int]) -> list[DuplicateMatch]:
+        n = len(row_ids)
 
-        # For each vector, find its neighbors within threshold
-        for i in range(self._vector_count):
-            if i in processed:
-                continue
+        # Best match among rows kept in previous batches.
+        if self.index.size() > 0:
+            prev_sim, prev_pos = self.index._index.search(batch, 1)
+            prev_sim, prev_pos = prev_sim[:, 0], prev_pos[:, 0]
+        else:
+            prev_sim = np.full(n, -np.inf, dtype=np.float32)
+            prev_pos = np.full(n, -1, dtype=np.int64)
 
-            # Get the vector by searching for itself (with a small epsilon)
-            # Actually, we need to reconstruct or use a different approach
-            # For now, we'll search with a large k and filter by threshold
-            try:
-                # Create a dummy query - we'll need to store vectors separately for this
-                # For MVP, we'll use a simpler approach: search all against all
-                # This is O(n^2) but acceptable for MVP
-                pass
-            except Exception:
-                pass
+        # Exact similarities inside the batch; only j < i (earlier rows) matter.
+        intra = batch @ batch.T
+        kept = np.zeros(n, dtype=bool)
+        matches: list[DuplicateMatch] = []
+        for i in range(n):
+            best_sim = float(prev_sim[i]) if prev_pos[i] >= 0 else -np.inf
+            best_id = self._kept_ids[prev_pos[i]] if prev_pos[i] >= 0 else -1
+            if i > 0:
+                earlier = np.flatnonzero(kept[:i])
+                if earlier.size:
+                    j = earlier[np.argmax(intra[i, earlier])]
+                    if intra[i, j] > best_sim:
+                        best_sim, best_id = float(intra[i, j]), int(row_ids[j])
+            if best_sim >= self.threshold:
+                matches.append(DuplicateMatch(int(row_ids[i]), int(best_id), best_sim))
+            else:
+                kept[i] = True
 
-        # Simpler approach: use the index's search capability
-        # We need to store vectors to query them. For MVP, let's use a workaround:
-        # We'll search each vector against all others by using the index's search
-
-        # Actually, FAISS IndexFlatL2 doesn't let us retrieve vectors easily.
-        # For MVP, we'll implement a simpler version that requires storing vectors.
-        # But that's not ideal. Let me implement a basic version that works:
-
-        # For now, return empty list - this will be improved in next iteration
-        # The proper implementation would require storing vectors separately
-        # or using a different FAISS index type that supports vector retrieval
-
-        # Basic implementation: search each vector against all others
-        # This requires us to have access to the vectors, which we don't store
-        # For MVP, we'll implement a version that the user must provide vectors for
-
-        # Actually, let's implement a working version using a stored vectors approach
-        # But that requires changing the API. For now, let's document the limitation
-        # and provide a basic implementation that works with the current API
-
-        # Since we can't retrieve vectors from FAISS IndexFlatL2 easily,
-        # we'll need to modify the class to store vectors. Let's do that:
-        return self._find_duplicates_with_stored_vectors(threshold)
-
-    def _find_duplicates_with_stored_vectors(
-        self, threshold: float
-    ) -> list[set[int]]:
-        """
-        Internal method to find duplicates using stored vectors.
-
-        Uses a union-find approach to group vectors within threshold distance.
-        """
-        if len(self._vectors) == 0:
-            return []
-
-        # Convert threshold to squared distance (L2 distance squared)
-        threshold_squared = threshold * threshold
-
-        # Union-Find data structure for grouping
-        parent = list(range(len(self._vectors)))
-
-        def find(x: int) -> int:
-            if parent[x] != x:
-                parent[x] = find(parent[x])
-            return parent[x]
-
-        def union(x: int, y: int) -> None:
-            root_x = find(x)
-            root_y = find(y)
-            if root_x != root_y:
-                parent[root_y] = root_x
-
-        # For each vector, find all neighbors within threshold
-        for i in range(len(self._vectors)):
-            # Search for neighbors of vector i
-            query = self._vectors[i].reshape(1, -1).astype(np.float32)
-            distances, indices = self._index.search(query, k=len(self._vectors))
-
-            # Group vectors that are within threshold
-            for dist, idx in zip(distances[0], indices[0]):
-                if dist <= threshold_squared and idx != i:
-                    union(i, idx)
-
-        # Group indices by their root
-        groups: dict[int, set[int]] = {}
-        for i in range(len(self._vectors)):
-            root = find(i)
-            if root not in groups:
-                groups[root] = set()
-            groups[root].add(i)
-
-        # Return groups with more than one element (actual duplicates)
-        duplicate_groups = [group for group in groups.values() if len(group) > 1]
-
-        return duplicate_groups
-
+        if kept.any():
+            self.index._index.add(batch[kept])
+            self._kept_ids.extend(int(row_ids[i]) for i in np.flatnonzero(kept))
+        return matches
