@@ -1,0 +1,49 @@
+name: Benchmarks
+
+# Runs the QQP accuracy evaluation and the 10k/100k/1M scaling benchmark on a
+# GitHub-hosted runner and uploads the JSON results as an artifact.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "benchmarks/**"
+      - ".github/workflows/benchmarks.yml"
+
+jobs:
+  benchmarks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e . datasketch huggingface_hub
+
+      - name: Machine
+        run: |
+          nproc
+          free -g
+          lscpu | grep -E "Model name|^CPU\(s\)"
+
+      - name: Fetch QQP
+        run: python benchmarks/fetch_qqp.py --out data/qqp.tsv
+
+      - name: QQP precision/recall
+        run: python benchmarks/qqp_eval.py --data data/qqp.tsv --out benchmarks/results/qqp_eval.json
+
+      - name: Scaling 10k / 100k / 1M rows
+        run: python benchmarks/scale_bench.py --data data/qqp.tsv --sizes 10000 100000 1000000 --out benchmarks/results/scale.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmark-results
+          path: benchmarks/results/*.json
