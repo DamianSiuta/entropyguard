@@ -23,7 +23,7 @@ IndexType = Literal["flat", "hnsw"]
 # efSearch the size of the candidate list during search.
 HNSW_M = 16
 HNSW_EF_CONSTRUCTION = 40
-HNSW_EF_SEARCH = 32
+HNSW_EF_SEARCH = 128
 
 # Batch size used when reconstructing vectors in find_duplicates().
 _RECONSTRUCT_BATCH = 4096
