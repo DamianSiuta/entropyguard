@@ -68,7 +68,7 @@ Index types (`--index`):
 | type   | FAISS index                | search | notes |
 |--------|----------------------------|--------|-------|
 | `flat` | `IndexFlatIP`              | exact  | cost O(n · kept) dot products |
-| `hnsw` | `IndexHNSWFlat` (M=16, efConstruction=40, efSearch=32, inner product) | approximate | may miss a few duplicates; much faster for large n |
+| `hnsw` | `IndexHNSWFlat` (M=16, efConstruction=40, efSearch=128, inner product) | approximate | QQP 100k: 99.97% of flat's duplicates; random vectors 1M: 52% (see README) |
 | `auto` | `flat` up to 100k rows after exact dedup, `hnsw` above | | |
 
 ### Checkpoints

@@ -16,9 +16,14 @@ uv pip install -e . pytest pytest-cov ruff datasketch
 pytest                                  # full suite
 EG_REQUIRE_MODEL=1 pytest               # fail (not skip) if the model can't be loaded
 ruff check src tests benchmarks
-python benchmarks/qqp_eval.py --data quora_duplicate_questions.tsv --out benchmarks/results/qqp_eval.json
-python benchmarks/scale_bench.py --data quora_duplicate_questions.tsv --out benchmarks/results/scale.json
+python benchmarks/fetch_qqp.py --out data/qqp.tsv          # needs Hugging Face access
+python benchmarks/qqp_eval.py --data data/qqp.tsv --out benchmarks/results/qqp_eval.json
+python benchmarks/scale_bench.py --data data/qqp.tsv --out benchmarks/results/scale.json
 ```
+
+The Benchmarks GitHub workflow runs these on a hosted runner and pushes the JSON
+results to a branch `bench-results/<sha>` (job logs/artifacts may not be reachable
+from sandboxed sessions; check-run annotations and git branches are).
 
 Tests that need the real model use the `embedder` fixture (`tests/conftest.py`).
 Pipeline/CLI logic is tested with the deterministic `BagOfWordsEmbedder`, which

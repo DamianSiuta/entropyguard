@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.0 — unreleased
+## 2.0.0 — 2026-10-15
 
 > **Important: in versions 1.22.0 – 1.23.0 semantic deduplication never ran.**
 > A condition introduced in 1.22.0 (`elif df is None and ...` after `df` had
@@ -30,8 +30,8 @@
   real cosine similarity. The embedding dimension is read from the model instead
   of being hardcoded to 384, so `--model-name` works with other models.
 - Duplicate search no longer does a full O(n²) scan with a second copy of every
-  vector in Python (8k vectors: 17.7 s → 0.6 s on the same machine, see
-  `benchmarks/`).
+  vector in Python (8k vectors: 18.3 s → 0.63 s on the same machine, see
+  `benchmarks/results/index_bench.json`).
 - `.entropyguardrc.*` and `--config` are loaded by the CLI (they were never
   wired in), and checkpoint/resume/batch-size settings can be used.
 - The README pipe example works: `--input`/`--output` default to stdin/stdout,
@@ -69,7 +69,9 @@
   `auto` uses HNSW above 100k rows.
 - CLI flags for existing settings: `--config`, `--batch-size`, `--checkpoint-dir`,
   `--resume`, `--dry-run`, `--quiet`, `--redact-pii`.
-- Benchmarks (`benchmarks/`): Quora Question Pairs precision/recall and scaling.
+- Benchmarks (`benchmarks/`): Quora Question Pairs precision/recall (semantic
+  F1 0.72 at threshold 0.80; precision 0.87 / recall 0.21 at the default 0.95)
+  and scaling (1M rows in 18.4 min on 4 vCPU, 2.6 GB peak), run in GitHub Actions.
 - GitHub Actions CI on Python 3.10–3.13 with the real model.
 - `ARCHITECTURE.md`, `CLAUDE.md`.
 
