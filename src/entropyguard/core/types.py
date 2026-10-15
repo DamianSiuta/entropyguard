@@ -25,7 +25,11 @@ class PipelineStats(TypedDict, total=False):
     exact_dupes_chars: int
     semantic_dupes_chars: int
     total_dropped_chars: int
-    estimated_api_savings: float
+    validation_dropped: int
+    validation_dropped_chars: int
+    index_type: str
+    resumed_from: Optional[str]
+    memory_report_path: str
     dry_run: bool
     would_write_rows: int
     audit_events: int
@@ -52,7 +56,7 @@ class PipelineConfig:
     text_column: str
     required_columns: Optional[list[str]] = None
     min_length: int = 50
-    dedup_threshold: float = 0.95
+    dedup_threshold: float = 0.95  # Cosine similarity at or above which rows are duplicates
     audit_log_path: Optional[str] = None
     chunk_size: Optional[int] = None
     chunk_overlap: int = 50
@@ -66,4 +70,6 @@ class PipelineConfig:
     checkpoint_dir: Optional[str] = None  # Directory for checkpoints
     resume: bool = False  # Resume from checkpoint if available
     auto_resume: bool = True  # Automatically resume from checkpoint if available (default: True)
+    redact_pii: bool = False  # Replace e-mails, phone numbers, SSNs, card numbers in the output text
+    index_type: str = "auto"  # Semantic index: "auto", "flat" (exact) or "hnsw" (approximate)
 

@@ -88,7 +88,7 @@ class TestPDFLoader:
         """Test load_dataset with nonexistent path."""
         from entropyguard.ingestion import load_dataset
         
-        with pytest.raises(ValueError, match="Path not found"):
+        with pytest.raises(FileNotFoundError, match="File not found"):
             load_dataset("/nonexistent/path/to/file.jsonl")
     
     def test_load_dataset_with_file_not_directory(self) -> None:

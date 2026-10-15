@@ -185,11 +185,11 @@ def estimate_lazyframe_memory_mb(lf) -> Optional[float]:
         import polars as pl
         
         # Get schema
-        schema = lf.schema
+        schema = lf.collect_schema()
         
         # Get row count (lazy operation, but may be expensive)
         try:
-            row_count = lf.select(pl.count()).collect().item()
+            row_count = lf.select(pl.len()).collect().item()
         except Exception:
             # If we can't get row count, return None
             return None

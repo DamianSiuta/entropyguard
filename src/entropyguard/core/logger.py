@@ -17,6 +17,9 @@ except ImportError:
     HAS_STRUCTLOG = False
 
 
+_configured = False
+
+
 def setup_logging(
     json_logs: bool = False,
     verbose: bool = False,
@@ -29,11 +32,14 @@ def setup_logging(
     Args:
         json_logs: If True, output logs as JSON (machine-readable)
         verbose: If True, set log level to DEBUG
-        output_to_stdout: If True, redirect logs to stderr (when outputting to stdout)
+        output_to_stdout: Kept for backwards compatibility. Logs always go to stderr,
+            so they never mix with data written to stdout.
     
     Returns:
         Logger instance (structlog if available, otherwise logging)
     """
+    global _configured
+    _configured = True
     if HAS_STRUCTLOG:
         # Generate correlation ID for this pipeline run
         correlation_id = str(uuid.uuid4())[:8]
@@ -77,9 +83,7 @@ def setup_logging(
             processors=processors,
             wrapper_class=structlog.make_filtering_bound_logger(log_level),
             context_class=dict,
-            logger_factory=structlog.PrintLoggerFactory(
-                file=sys.stderr if output_to_stdout else sys.stdout
-            ),
+            logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
             cache_logger_on_first_use=True,
         )
         
@@ -94,19 +98,12 @@ def setup_logging(
             log_level = logging.INFO
         log_format = '%(levelname)s: %(message)s' if verbose else '%(message)s'
         
-        if output_to_stdout:
-            logging.basicConfig(
-                level=log_level,
-                format=log_format,
-                stream=sys.stderr,
-                force=True
-            )
-        else:
-            logging.basicConfig(
-                level=log_level,
-                format=log_format,
-                force=True
-            )
+        logging.basicConfig(
+            level=log_level,
+            format=log_format,
+            stream=sys.stderr,
+            force=True
+        )
         
         return logging.getLogger("entropyguard")
 
@@ -169,6 +166,10 @@ def get_logger() -> Any:  # type: ignore[no-any-return]
     Note: Return type is Any because structlog and logging have different types,
     but both implement the same logging interface.
     """
+    global _configured
+    if not _configured:
+        # Unconfigured structlog prints to stdout, which would corrupt piped output.
+        setup_logging(demo_mode=True)
     if HAS_STRUCTLOG:
         return structlog.get_logger()
     else:

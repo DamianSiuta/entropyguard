@@ -151,10 +151,11 @@ class TestLoadDataset:
 
     def test_load_unsupported_format(self):
         """Test loading unsupported format raises ValueError."""
-        # Create a file with unsupported extension
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+        # Unknown extension and binary content: neither suffix nor magic bytes match.
+        # (A .txt file with printable content is loaded as CSV by design.)
+        with tempfile.NamedTemporaryFile(mode='wb', suffix='.xyz', delete=False) as f:
             input_path = f.name
-            f.write("test content")
+            f.write(bytes([0, 159, 146, 150, 1, 2, 3, 4]))
         
         try:
             with pytest.raises(ValueError, match="Unsupported file format"):
@@ -207,8 +208,7 @@ class TestLoadDataset:
             # Empty file
         
         try:
-            # Empty NDJSON causes Polars to raise error (cannot infer types)
-            with pytest.raises(ValueError, match="Failed to load dataset"):
+            with pytest.raises(ValueError, match="File is empty"):
                 load_dataset(input_path)
         finally:
             Path(input_path).unlink()

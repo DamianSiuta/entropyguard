@@ -205,6 +205,9 @@ def load_dataset(file_path: str, show_progress: bool = True) -> pl.LazyFrame:
     """
     path = Path(file_path)
 
+    if not path.exists():
+        raise FileNotFoundError(f"File not found: {file_path}")
+
     # Validate path before loading
     is_valid, error_msg = validate_input_file(file_path)
     if not is_valid:
