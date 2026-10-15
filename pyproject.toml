@@ -1,6 +1,6 @@
 [project]
 name = "entropyguard"
-version = "1.23.0"
+version = "2.0.0"
 description = "Local exact and semantic deduplication for text datasets (Polars + FAISS + sentence-transformers)."
 authors = [{ name = "Damian Siuta" }]
 readme = "README.md"
